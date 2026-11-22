@@ -270,6 +270,8 @@ td.l,th.l{text-align:left}
           <option value="ok">Sem alerta</option>
         </select>
         <input type="search" id="aBusca" placeholder="Buscar curral…" aria-label="Buscar curral">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)">Variações em
+          <span class="seg" id="aUnid" role="group" aria-label="Mostrar variações em"><button data-u="pct">%</button><button data-u="kg">kg</button></span></span>
         <span id="aResumo" style="font-size:12px;color:var(--ink2)"></span>
       </div>
       <div class="kpis" id="anKpis"></div>
@@ -450,6 +452,8 @@ function analisar(farmId, data){
     const L = limitesDe(cfg, r.racao);
     r.dOntem = (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100;
     r.d5 = (r.cons_dia_ms - r.ms_5d)/r.ms_5d*100;
+    r.dOntemKg = r.cons_dia_ms - r.ms_1d;
+    r.d5Kg = r.cons_dia_ms - r.ms_5d;
     const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv;
     r.dCurva = e.pv==null ? null : r.cons_dia_pv - e.pv;
     r.ajuste = ajusteNota(cfg, r.cocho_d1);
@@ -914,6 +918,16 @@ function abrirSeletor(){
 /* =====================================================================
    ANÁLISE – visão geral para o computador
    ===================================================================== */
+/* variações em % ou em kg de MS por cabeça (escolha da tela Análise) */
+let UNID = LS.get("unidVar")==="kg" ? "kg" : "pct";
+const kgv = v => v==null||isNaN(v) ? "–" : (v>0?"+":v<0?"−":"")+fmt(Math.abs(v))+" kg";
+const varF = (p, k) => UNID==="kg" ? kgv(k) : pct(p);
+function marcarUnid(){ document.querySelectorAll("#aUnid button").forEach(b=>b.classList.toggle("on", b.dataset.u===UNID)); }
+document.querySelectorAll("#aUnid button").forEach(b=>b.onclick=()=>{ UNID=b.dataset.u; LS.set("unidVar",UNID);
+  if(S.sort.k==="dOntem"||S.sort.k==="dOntemKg") S.sort.k = UNID==="kg"?"dOntemKg":"dOntem";
+  if(S.sort.k==="d5"||S.sort.k==="d5Kg") S.sort.k = UNID==="kg"?"d5Kg":"d5";
+  marcarUnid(); renderAnalise(); });
+marcarUnid();
 function anRows(){
   const sx=$("#aSexo").value, d=$("#aDieta").value, st=$("#aStatus").value, q=$("#aBusca").value.trim().toLowerCase();
   return S.rows.filter(r=>(!sx||r.sexo===sx)&&(!d||r.racao===d)&&(!q||String(r.curral).toLowerCase().includes(q))&&
@@ -937,7 +951,7 @@ function renderKpis(R){
   const dias=media(R,"dias_conf");
   $("#anKpis").innerHTML=`
     <div class="kpi"><div class="l">Baias · cabeças</div><div class="v">${R.length} · ${cab.toLocaleString("pt-BR")}</div><div class="s">${fmt(dias,0)} dias de cocho em média</div></div>
-    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(ms)}</div><div class="s"><span class="${(ms-ms1)<0?"down":"up"}">${pct((ms-ms1)/ms1*100)}</span> × ontem · <span class="${(ms-ms5)<0?"down":"up"}">${pct((ms-ms5)/ms5*100)}</span> × 5 dias</div></div>
+    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(ms)}</div><div class="s"><span class="${(ms-ms1)<0?"down":"up"}">${varF((ms-ms1)/ms1*100, ms-ms1)}</span> × ontem · <span class="${(ms-ms5)<0?"down":"up"}">${varF((ms-ms5)/ms5*100, ms-ms5)}</span> × 5 dias</div></div>
     <div class="kpi"><div class="l">MN média (kg/cab)</div><div class="v">${fmt(media(R,"cons_dia_mn"))}</div><div class="s">matéria natural</div></div>
     <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(pv)}%</div><div class="s">${esp!=null?"esperado "+fmt(esp)+"% ("+pp(pv-esp)+")":"sem curva cadastrada"}</div></div>
     <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nA+nM}</div><div class="s"><span class="chip alto">${nA} alto</span> <span class="chip medio">${nM} atenção</span></div></div>`;
@@ -984,19 +998,20 @@ function renderScatter(R){
   box.querySelectorAll("circle").forEach(c=>{
     const r=R.find(o=>o.curral===c.dataset.cur);
     const show=()=>{ const b=box.getBoundingClientRect(), cb=c.getBoundingClientRect();
-      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias<br>${fmt(r.cons_dia_pv)}% PV${r.pvEsp!=null?` · esp. ${fmt(r.pvEsp)}%`:""}<br>${fmt(r.cons_dia_ms)} kg MS · ${pct(r.dOntem)} × ontem`;
+      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias<br>${fmt(r.cons_dia_pv)}% PV${r.pvEsp!=null?` · esp. ${fmt(r.pvEsp)}%`:""}<br>${fmt(r.cons_dia_ms)} kg MS · ${varF(r.dOntem,r.dOntemKg)} × ontem`;
       tip.style.left=(cb.left-b.left+cb.width/2)+"px"; tip.style.top=(cb.top-b.top)+"px"; tip.style.opacity=1; };
     c.onmouseenter=show; c.onmouseleave=()=>tip.style.opacity=0; c.onclick=()=>openBaia(r.curral);
   });
 }
 /* mapa de calor: desvio do consumo de MS do dia em relação à média de 5 dias, por relatório */
-function corHeat(v){
+function corHeat(v, escala){
   if(v==null||isNaN(v)) return null;
-  const t=Math.max(-1,Math.min(1,v/12)), a=Math.abs(t);
+  const t=Math.max(-1,Math.min(1,v/(escala||12))), a=Math.abs(t);
   const neutro=escuro()?[38,50,74]:[238,241,245], neg=escuro()?[230,103,103]:[204,51,51], pos=escuro()?[143,179,236]:[2,53,119];
   const alvo=t<0?neg:pos, k=a<0.12?0:Math.pow(a,0.8);
   return `rgb(${neutro.map((n,i)=>Math.round(n+(alvo[i]-n)*k)).join(",")})`;
 }
+const ESC_KG = 1.2;   // no mapa em kg, ±1,2 kg de MS/cab já aparece com a cor mais forte
 function renderHeat(R){
   const box=$("#anHeat"); if(!box) return;
   const datas=datasAte(S.farm,S.data).slice(-14);
@@ -1005,12 +1020,12 @@ function renderHeat(R){
   const rel=DATA[S.farm].relatorios;
   const linhas=[...R].sort(ordCurral).map(r=>{
     const cel=datas.map(d=>{ const x=acharBaia(rel[d],r); if(!x||!x.ms_5d) return `<td class="vazio" title="sem dado em ${d}"></td>`;
-      const v=(x.cons_dia_ms-x.ms_5d)/x.ms_5d*100;
-      return `<td style="background:${corHeat(v)}" title="${esc(r.curral)} · ${d}: ${fmt(x.cons_dia_ms)} kg MS (${pct(v)} × média 5 dias)" data-cur="${esc(r.curral)}" data-d="${d}"></td>`; }).join("");
+      const vp=(x.cons_dia_ms-x.ms_5d)/x.ms_5d*100, vk=x.cons_dia_ms-x.ms_5d;
+      return `<td style="background:${UNID==="kg"?corHeat(vk,ESC_KG):corHeat(vp)}" title="${esc(r.curral)} · ${d}: ${fmt(x.cons_dia_ms)} kg MS (${varF(vp,vk)} × média 5 dias)" data-cur="${esc(r.curral)}" data-d="${d}"></td>`; }).join("");
     return `<tr><td class="lbl">${esc(r.curral)}</td>${cel}</tr>`;
   }).join("");
   box.innerHTML=`<table><thead><tr><th></th>${datas.map(d=>`<th>${d.slice(0,5)}</th>`).join("")}</tr></thead><tbody>${linhas}</tbody></table>
-    <div class="heat-leg"><span>−12% ou menos</span><span class="bar" style="background:linear-gradient(90deg,${corHeat(-12)},${corHeat(-6)},${corHeat(0)},${corHeat(6)},${corHeat(12)})"></span><span>+12% ou mais</span><span style="margin-left:8px">▨ sem dado</span></div>`;
+    <div class="heat-leg"><span>${UNID==="kg"?"−"+fmt(ESC_KG,1)+" kg":"−12%"} ou menos</span><span class="bar" style="background:linear-gradient(90deg,${corHeat(-12)},${corHeat(-6)},${corHeat(0)},${corHeat(6)},${corHeat(12)})"></span><span>${UNID==="kg"?"+"+fmt(ESC_KG,1)+" kg":"+12%"} ou mais</span><span style="margin-left:8px">▨ sem dado</span></div>`;
   box.querySelectorAll("td[data-cur]").forEach(td=>td.onclick=()=>{ if(td.dataset.d!==S.data){ S.data=td.dataset.d; $("#dateSel").value=S.data; refresh(); } openBaia(td.dataset.cur); });
 }
 /* comparar curvas de várias baias */
@@ -1066,19 +1081,20 @@ function renderCmp(R){
 function renderDietas(R){
   const grupos={}; R.forEach(r=>(grupos[r.racao]=grupos[r.racao]||[]).push(r));
   const linhas=Object.entries(grupos).map(([d,rs])=>{ const ms=media(rs,"cons_dia_ms"), ms1=media(rs,"ms_1d");
-    return {d, n:rs.length, cab:rs.reduce((s,r)=>s+r.cab,0), dias:media(rs,"dias_conf"), ms, mn:media(rs,"cons_dia_mn"), pv:media(rs,"cons_dia_pv"), dO:(ms-ms1)/ms1*100, al:rs.filter(r=>r.sev!=="ok").length}; })
+    return {d, n:rs.length, cab:rs.reduce((s,r)=>s+r.cab,0), dias:media(rs,"dias_conf"), ms, mn:media(rs,"cons_dia_mn"), pv:media(rs,"cons_dia_pv"), dO:(ms-ms1)/ms1*100, dOk:ms-ms1, al:rs.filter(r=>r.sev!=="ok").length}; })
     .sort((a,b)=>b.cab-a.cab);
   $("#anDietas").innerHTML=`<thead><tr><th class="l">Dieta</th><th>Baias</th><th>Cab</th><th>Dias</th><th>MN</th><th>MS</th><th>%PV</th><th>Δ ontem</th><th>Alertas</th></tr></thead><tbody>`+
     linhas.map(l=>`<tr data-d="${esc(l.d)}"><td class="l"><b>${esc(l.d)}</b></td><td>${l.n}</td><td>${l.cab.toLocaleString("pt-BR")}</td><td>${fmt(l.dias,0)}</td><td>${fmt(l.mn)}</td><td>${fmt(l.ms)}</td><td>${fmt(l.pv)}</td>
-      <td class="${l.dO<0?"down":"up"}">${pct(l.dO)}</td><td>${l.al?`<span class="chip medio">${l.al}</span>`:"–"}</td></tr>`).join("")+`</tbody>`;
+      <td class="${l.dO<0?"down":"up"}">${varF(l.dO,l.dOk)}</td><td>${l.al?`<span class="chip medio">${l.al}</span>`:"–"}</td></tr>`).join("")+`</tbody>`;
   $("#anDietas").querySelectorAll("tbody tr").forEach(tr=>tr.onclick=()=>{ $("#aDieta").value=tr.dataset.d; renderAnalise(); });
 }
 /* tabela completa */
 const COLS=[
   {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias cocho"},{k:"racao",t:"Dieta",l:1},{k:"racao_dias",t:"Dias dieta"},
-  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem"},{k:"d5",t:"Δ 5d"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},
+  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem",kg:"dOntemKg"},{k:"d5",t:"Δ 5d",kg:"d5Kg"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},
   {k:"tend",t:"Últimos 10 dias",l:1,semOrdem:1},{k:"cocho_d1",t:"Cocho D-3/D-2/D-1"}
 ];
+const chaveCol = c => UNID==="kg" && c.kg ? c.kg : c.k;
 function spark(r){
   const h=historico(S.farm,r).filter(p=>p.ms!=null).slice(-10); if(h.length<2) return `<span style="color:var(--muted)">–</span>`;
   const W=90,H=22, vs=h.map(p=>p.ms), lo=Math.min(...vs), hi=Math.max(...vs), rg=hi-lo||1;
@@ -1092,21 +1108,21 @@ function renderTabela(R){
     if(va==null) return 1; if(vb==null) return -1;
     return (typeof va==="string"? va.localeCompare(vb,"pt-BR",{numeric:true}) : va-vb)*dir; });
   const cls=v=>v==null?"":v<0?"down":v>0?"up":"";
-  $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${c.k}" ${c.semOrdem?'style="cursor:default"':""}>${c.t}${k===c.k?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
+  $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${chaveCol(c)}" ${c.semOrdem?'style="cursor:default"':""}>${c.t}${c.kg?(UNID==="kg"?" (kg)":" (%)"):""}${k===chaveCol(c)?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
     R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
       <td>${r.cab}</td><td>${r.dias_conf}</td><td class="l">${esc(r.racao)}</td><td>${r.racao_dias??"–"}</td><td>${fmt(r.cons_dia_mn)}</td><td><b>${fmt(r.cons_dia_ms)}</b></td>
-      <td class="${cls(r.dOntem)}">${pct(r.dOntem)}</td><td class="${cls(r.d5)}">${pct(r.d5)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
+      <td class="${cls(r.dOntem)}">${varF(r.dOntem,r.dOntemKg)}</td><td class="${cls(r.d5)}">${varF(r.d5,r.d5Kg)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
       <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
     (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
-  $("#tbl").querySelectorAll("th").forEach(th=>{ const c=COLS.find(c=>c.k===th.dataset.k); if(c.semOrdem) return;
+  $("#tbl").querySelectorAll("th").forEach(th=>{ const c=COLS.find(c=>chaveCol(c)===th.dataset.k); if(!c||c.semOrdem) return;
     th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(anRows()); }; });
   $("#tbl").querySelectorAll("tbody tr[data-cur]").forEach(tr=>tr.onclick=()=>openBaia(tr.dataset.cur));
 }
 $("#btnCsv").onclick=()=>{
   const R=[...anRows()].sort(ordCurral);
-  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média 5d","Var. ontem %","Var. 5d %","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
+  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média 5d","Var. ontem %","Var. 5d %","Var. ontem kg","Var. 5d kg","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
   const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
-  const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
+  const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
   const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ const s=String(v); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download=`mr-report_${S.farm}_${S.data.split("/").reverse().join("-")}.csv`; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
