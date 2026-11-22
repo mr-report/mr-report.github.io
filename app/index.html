@@ -227,7 +227,8 @@ async function rpc(fn, body){
     if(/senha_invalida/.test(m)) throw new ErroAPI("Senha não reconhecida.","senha");
     if(/sessao_expirada/.test(m)) throw new ErroAPI("Sua sessão expirou. Entre de novo.","sessao");
     if(/sem_permissao/.test(m)) throw new ErroAPI("Sem permissão para isso.","permissao");
-    if(/botao_nao_configurado/.test(m)) throw new ErroAPI("A busca no e-mail ainda não foi configurada pelo administrador.","nao_configurado");
+    if(/botao_nao_configurado/.test(m) || ((j && j.code==="PGRST202") && /pedir_coleta|situacao_pedido/.test(m)))
+      throw new ErroAPI("A busca no e-mail ainda não foi configurada pelo administrador.","nao_configurado");
     throw new ErroAPI("Erro no servidor: " + m, "servidor");
   }
   return j;
