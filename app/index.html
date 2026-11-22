@@ -250,6 +250,7 @@ td.l,th.l{text-align:left}
     <nav id="tabs">
       <button data-tab="vistoria">Vistoria</button>
       <button data-tab="analise">Análise</button>
+      <button data-tab="baias">Baias</button>
       <button data-tab="adm" class="adm-only hidden">Cadastros</button>
       <button data-tab="comparativo" class="adm-only hidden">Comparativo</button>
       <button data-tab="fazendas" class="adm-only hidden">Fazendas</button>
@@ -277,21 +278,35 @@ td.l,th.l{text-align:left}
       <div class="kpis" id="anKpis"></div>
       <div class="an-grid c2">
         <div class="card"><h3>Alertas do dia</h3><div class="alerts an-scroll" id="anAlerts"></div></div>
-        <div class="card"><h3>Consumo (%PV) × dias de cocho <small>pontos = baias · tracejado = curva esperada</small></h3><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
+        <div class="card"><div class="vt-sec-h"><h3 style="margin:0" id="scTit">Consumo × dias de cocho</h3><div class="seg" id="scMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
       </div>
       <div class="card" style="margin-bottom:12px">
         <h3>Mapa de variação do consumo <small>MS do dia × média dos 5 dias anteriores, por relatório · toque numa célula para abrir a baia</small></h3>
         <div class="heat" id="anHeat"></div>
       </div>
       <div class="an-grid c2b">
-        <div class="card"><h3>Comparar curvas de consumo <small>kg MS/cab por dias de cocho · escolha até 6 baias</small></h3><div class="cmp-sel" id="anCmpSel"></div><div class="chart" id="anCmp"></div><div class="legend" id="anCmpLeg"></div></div>
+        <div class="card"><div class="vt-sec-h"><h3 style="margin:0">Comparar curvas de consumo <small>escolha até 6 baias</small></h3><div class="seg" id="cmpMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="cmp-sel" id="anCmpSel"></div><div class="chart" id="anCmp"></div><div class="legend" id="anCmpLeg"></div></div>
         <div class="card"><h3>Resumo por dieta <small>médias ponderadas por cabeças</small></h3><div class="tablewrap"><table id="anDietas"></table></div></div>
       </div>
+    </div>
+    <div id="tab-baias" class="hidden tabc">
+      <div class="an-filters">
+        <select id="bSexo" aria-label="Sexo"><option value="">Todos os sexos</option><option>Macho</option><option>Fêmea</option></select>
+        <select id="bDieta" aria-label="Dieta"></select>
+        <select id="bStatus" aria-label="Status">
+          <option value="">Todos os status</option>
+          <option value="alerta">Com alerta (alto + médio)</option>
+          <option value="alto">Só alertas altos</option>
+          <option value="ok">Sem alerta</option>
+        </select>
+        <input type="search" id="bBusca" placeholder="Buscar curral…" aria-label="Buscar curral">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2)">Variações em
+          <span class="seg" id="bUnid" role="group" aria-label="Mostrar variações em"><button data-u="pct">%</button><button data-u="kg">kg</button></span></span>
+        <span id="bResumo" style="font-size:12px;color:var(--ink2)"></span>
+        <button class="btn ghost small" id="btnCsv" style="margin-left:auto">Baixar planilha (CSV)</button>
+      </div>
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <h3 style="margin:0">Todas as baias <small>clique no cabeçalho para ordenar · na linha para abrir</small></h3>
-          <button class="btn ghost small" id="btnCsv">Baixar planilha (CSV)</button>
-        </div>
+        <h3>Todas as baias <small>clique no cabeçalho para ordenar · na linha para abrir o detalhe</small></h3>
         <div class="tablewrap" style="border:0"><table id="tbl"></table></div>
       </div>
     </div>
@@ -560,7 +575,7 @@ function iniciar(sessao){
   preencherSeletor(fz);
   const ultima = LS.get("ultimaFazenda");
   const abaSalva = LS.get("aba");
-  setTab(["vistoria","analise"].includes(abaSalva) ? abaSalva : (window.innerWidth < 900 ? "vistoria" : "analise"));
+  setTab(["vistoria","analise","baias"].includes(abaSalva) ? abaSalva : (window.innerWidth < 900 ? "vistoria" : "analise"));
   if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
   else if(S.user.admin){ mostrarVazio("Nenhuma fazenda cadastrada ainda."); setTab("fazendas"); }
   else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
@@ -646,7 +661,7 @@ function ultimoProcessado(fid){
 function mostrarVazio(msg){
   $("#vazio").textContent = msg; $("#vazio").classList.remove("hidden");
   document.querySelectorAll(".tabc").forEach(el=>el.classList.add("hidden-vazio"));
-  $("#tab-vistoria").classList.add("hidden"); $("#tab-analise").classList.add("hidden");
+  $("#tab-vistoria").classList.add("hidden"); $("#tab-analise").classList.add("hidden"); $("#tab-baias").classList.add("hidden");
 }
 
 async function setFarm(id, soRede){
@@ -696,11 +711,12 @@ function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["vistoria","analise","adm","fazendas","comparativo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
+  ["vistoria","analise","baias","adm","fazendas","comparativo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
   $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
   if(!abaAdm(t)) LS.set("aba", t);
   if(t==="vistoria" && S.rows) renderVistoria();
   if(t==="analise" && S.rows) renderAnalise();
+  if(t==="baias" && S.rows) renderBaias();
   if(t==="adm") renderAdm();
   if(t==="fazendas") renderFazendas();
   if(t==="comparativo") renderComparativo();
@@ -711,6 +727,7 @@ function refresh(){
   $("#brandSub").textContent = S.user.admin ? "ADM" : "";
   if(S.tab==="vistoria") renderVistoria();
   if(S.tab==="analise") renderAnalise();
+  if(S.tab==="baias") renderBaias();
   if(S.tab==="adm") renderAdm();
 }
 
@@ -922,11 +939,26 @@ function abrirSeletor(){
 let UNID = LS.get("unidVar")==="kg" ? "kg" : "pct";
 const kgv = v => v==null||isNaN(v) ? "–" : (v>0?"+":v<0?"−":"")+fmt(Math.abs(v))+" kg";
 const varF = (p, k) => UNID==="kg" ? kgv(k) : pct(p);
-function marcarUnid(){ document.querySelectorAll("#aUnid button").forEach(b=>b.classList.toggle("on", b.dataset.u===UNID)); }
-document.querySelectorAll("#aUnid button").forEach(b=>b.onclick=()=>{ UNID=b.dataset.u; LS.set("unidVar",UNID);
+function marcarUnid(){ document.querySelectorAll("#aUnid button, #bUnid button").forEach(b=>b.classList.toggle("on", b.dataset.u===UNID)); }
+document.querySelectorAll("#aUnid button, #bUnid button").forEach(b=>b.onclick=()=>{ UNID=b.dataset.u; LS.set("unidVar",UNID);
   if(S.sort.k==="dOntem"||S.sort.k==="dOntemKg") S.sort.k = UNID==="kg"?"dOntemKg":"dOntem";
   if(S.sort.k==="d5"||S.sort.k==="d5Kg") S.sort.k = UNID==="kg"?"d5Kg":"d5";
-  marcarUnid(); renderAnalise(); });
+  marcarUnid(); if(S.tab==="baias") renderBaias(); else renderAnalise(); });
+/* aba Baias: tabela completa com filtros próprios */
+function baiasRows(){
+  const sx=$("#bSexo").value, d=$("#bDieta").value, st=$("#bStatus").value, q=$("#bBusca").value.trim().toLowerCase();
+  return S.rows.filter(r=>(!sx||r.sexo===sx)&&(!d||r.racao===d)&&(!q||String(r.curral).toLowerCase().includes(q))&&
+    (!st || (st==="alerta"&&r.sev!=="ok") || (st==="alto"&&r.sev==="alto") || (st==="ok"&&r.sev==="ok")));
+}
+["#bSexo","#bDieta","#bStatus","#bBusca"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,()=>renderBaias())));
+function renderBaias(){
+  if(!S.rows) return;
+  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort(), cur=$("#bDieta").value;
+  $("#bDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
+  const R=baiasRows();
+  $("#bResumo").textContent = R.length===S.rows.length ? `${R.length} baias` : `${R.length} de ${S.rows.length} baias`;
+  renderTabela(R);
+}
 marcarUnid();
 function anRows(){
   const sx=$("#aSexo").value, d=$("#aDieta").value, st=$("#aStatus").value, q=$("#aBusca").value.trim().toLowerCase();
@@ -940,7 +972,7 @@ function renderAnalise(){
   $("#aDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
   const R=anRows();
   $("#aResumo").textContent = R.length===S.rows.length ? "" : `${R.length} de ${S.rows.length} baias`;
-  renderKpis(R); renderAlertas(R); renderScatter(R); renderHeat(R); renderCmp(R); renderDietas(R); renderTabela(R);
+  renderKpis(R); renderAlertas(R); renderScatter(R); renderHeat(R); renderCmp(R); renderDietas(R);
 }
 function media(R,k){ const cab=R.reduce((s,r)=>s+(r[k]!=null?r.cab:0),0); return cab? R.reduce((s,r)=>s+(r[k]!=null?r[k]*r.cab:0),0)/cab : null; }
 function renderKpis(R){
@@ -966,22 +998,32 @@ function renderAlertas(R){
   }).join("") : `<div class="empty">Nenhum alerta com esses filtros. ✔</div>`;
   $("#anAlerts").querySelectorAll(".alert").forEach(el=>{ el.onclick=()=>openBaia(el.dataset.cur); el.onkeydown=e=>{ if(e.key==="Enter") openBaia(el.dataset.cur); }; });
 }
+/* escolha kg MS | %PV dos gráficos da Análise (lembrada no aparelho) */
+const GM = { sc: LS.get("gmSc")||"pv", cmp: LS.get("gmCmp")||"ms" };
+function ligarModos(){
+  [["#scMod","sc","gmSc",()=>renderScatter(anRows())],["#cmpMod","cmp","gmCmp",()=>renderCmp(anRows())]].forEach(([sel,k,ls,fn])=>{
+    document.querySelectorAll(sel+" button").forEach(b=>{ b.classList.toggle("on",b.dataset.m===GM[k]);
+      b.onclick=()=>{ GM[k]=b.dataset.m; LS.set(ls,GM[k]); document.querySelectorAll(sel+" button").forEach(x=>x.classList.toggle("on",x===b)); fn(); }; }); });
+}
+ligarModos();
+function passoBonito(rg){ const b=Math.pow(10,Math.floor(Math.log10(rg/4))); return [1,2,2.5,5,10].map(k=>k*b).find(s=>rg/s<=6) || b*10; }
 function renderScatter(R){
   const box=$("#anScatter"); if(!box) return;
   if(!R.length){ box.innerHTML=""; $("#anScatterLeg").innerHTML=""; return; }
-  const cfg=getConfig(S.farm);
+  const cfg=getConfig(S.farm), emPV = GM.sc==="pv", campo = emPV ? "cons_dia_pv" : "cons_dia_ms";
+  $("#scTit").innerHTML = `Consumo × dias de cocho <small>${emPV?"%PV · tracejado = curva esperada":"kg MS/cab"}</small>`;
   const W=Math.max(320,box.clientWidth||600), H=W<560?250:290, m={l:40,r:12,t:12,b:34};
   const maxD=Math.max(...R.map(r=>r.dias_conf))+10, minD=0;
-  const pvs=R.map(r=>r.cons_dia_pv).concat(R.map(r=>r.pvEsp).filter(v=>v!=null));
-  const lo=Math.floor((Math.min(...pvs)-0.2)*5)/5, hi=Math.ceil((Math.max(...pvs)+0.2)*5)/5;
+  const vals=R.map(r=>r[campo]).concat(emPV ? R.map(r=>r.pvEsp).filter(v=>v!=null) : []);
+  const folga=emPV?0.2:0.8, passoY=passoBonito(Math.max(...vals)-Math.min(...vals)+2*folga);
+  const lo=Math.max(0,Math.floor((Math.min(...vals)-folga)/passoY)*passoY), hi=Math.ceil((Math.max(...vals)+folga)/passoY)*passoY;
   const x=d=>m.l+(d-minD)/(maxD-minD)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
   let g="";
-  const passoY=(hi-lo)>1.6?0.4:0.2;
   for(let v=lo; v<=hi+1e-9; v+=passoY){ g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
   const step=(maxD>150?30:maxD>60?15:10)*(W<560?2:1);
   for(let d=0; d<=maxD; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
   g+=`<text x="${W-m.r}" y="${H-3}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
-  const sexos=[...new Set(R.map(r=>r.sexo).filter(Boolean))];
+  const sexos=emPV ? [...new Set(R.map(r=>r.sexo).filter(Boolean))] : [];
   sexos.forEach((sx,i)=>{
     const fx=cfg.curva.filter(c=>c.sexo===sx).sort((a,b)=>a.diaIni-b.diaIni);
     let p=""; fx.forEach(c=>{ const a=Math.max(c.diaIni,minD), b=Math.min(c.diaFim,maxD); if(a>maxD) return; p+=`M${x(a)},${y(c.pv)}H${x(b)}`; });
@@ -989,7 +1031,7 @@ function renderScatter(R){
   });
   R.forEach(r=>{
     const col = r.sev==="alto"?"var(--crit)":r.sev==="medio"?"var(--warn)":"var(--accent)";
-    g+=`<circle cx="${x(r.dias_conf)}" cy="${y(r.cons_dia_pv)}" r="6" fill="${col}" stroke="var(--card)" stroke-width="2" data-cur="${esc(r.curral)}" style="cursor:pointer"/>`;
+    g+=`<circle cx="${x(r.dias_conf)}" cy="${y(r[campo])}" r="6" fill="${col}" stroke="var(--card)" stroke-width="2" data-cur="${esc(r.curral)}" style="cursor:pointer"/>`;
   });
   box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="IMS %PV de cada baia por dias de cocho">${g}</svg><div class="tip"></div>`;
   $("#anScatterLeg").innerHTML=`<span><i style="background:var(--accent)"></i>sem alerta</span><span><i style="background:var(--warn)"></i>atenção</span><span><i style="background:var(--crit)"></i>alerta alto</span>`+
@@ -1047,34 +1089,36 @@ function renderCmp(R){
   const add=$("#anCmpAdd");
   if(add){ const f=()=>{ const v=add.value.trim(); const r=todos.find(o=>String(o.curral).toLowerCase()===v.toLowerCase()); if(r&&!CMP.sel.includes(r.curral)&&CMP.sel.length<6){ CMP.sel.push(r.curral); renderCmp(R);} };
     add.addEventListener("change",f); add.addEventListener("keydown",e=>{ if(e.key==="Enter") f(); }); }
-  const series=CMP.sel.map((c,i)=>{ const r=todos.find(o=>o.curral===c); return {c, cor:`var(${CORES[i]})`, h:historico(S.farm,r).filter(p=>p.ms!=null)}; }).filter(s=>s.h.length);
+  const K = GM.cmp==="pv" ? "pv" : "ms", UN = K==="pv" ? "% PV" : "kg MS/cab";
+  const series=CMP.sel.map((c,i)=>{ const r=todos.find(o=>o.curral===c); return {c, cor:`var(${CORES[i]})`, h:historico(S.farm,r).filter(p=>p[K]!=null).map(p=>({...p, v:p[K]}))}; }).filter(s=>s.h.length);
   if(!series.length){ box.innerHTML=`<div class="empty">Escolha baias para comparar.</div>`; $("#anCmpLeg").innerHTML=""; return; }
   const W=Math.max(320,box.clientWidth||560), H=260, m={l:38,r:56,t:12,b:30};
   const all=series.flatMap(s=>s.h);
   const dmin=Math.min(...all.map(p=>p.dias)), dmax=Math.max(dmin+1,...all.map(p=>p.dias));
-  let lo=Math.min(...all.map(p=>p.ms)), hi=Math.max(...all.map(p=>p.ms)), pad=(hi-lo)*0.12||1; lo=Math.max(0,lo-pad); hi+=pad;
+  let lo=Math.min(...all.map(p=>p.v)), hi=Math.max(...all.map(p=>p.v)), pad=(hi-lo)*0.12||(K==="pv"?0.2:1); lo=Math.max(0,lo-pad); hi+=pad;
   const x=d=>m.l+(d-dmin)/(dmax-dmin)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
   let g="";
-  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+  const casasY=(hi-lo)<1.5?2:1;
+  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,casasY)}</text>`; }
   const span=dmax-dmin, step=span<=12?2:span<=30?5:span<=80?10:20;
   for(let d=Math.ceil(dmin/step)*step; d<=dmax; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+15}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
-  g+=`<text x="${W-m.r}" y="${H-2}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
+  g+=`<text x="${W-m.r}" y="${H-2}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho · ${UN}</text>`;
   const fim=[];
   series.forEach(s=>{
-    g+=`<path d="${s.h.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p.ms)).join("")}" fill="none" stroke="${s.cor}" stroke-width="2.2" stroke-linejoin="round"/>`;
-    const u=s.h[s.h.length-1]; g+=`<circle cx="${x(u.dias)}" cy="${y(u.ms)}" r="3.5" fill="${s.cor}"/>`; fim.push({s,y:y(u.ms),x:x(u.dias)});
+    g+=`<path d="${s.h.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p.v)).join("")}" fill="none" stroke="${s.cor}" stroke-width="2.2" stroke-linejoin="round"/>`;
+    const u=s.h[s.h.length-1]; g+=`<circle cx="${x(u.dias)}" cy="${y(u.v)}" r="3.5" fill="${s.cor}"/>`; fim.push({s,y:y(u.v),x:x(u.dias)});
   });
   if(series.length<=4){ fim.sort((a,b)=>a.y-b.y); for(let i=1;i<fim.length;i++) if(fim[i].y-fim[i-1].y<13) fim[i].y=fim[i-1].y+13;
     fim.forEach(f=>g+=`<text x="${f.x+7}" y="${f.y+4}" font-size="11" font-weight="700" fill="var(--ink)">${esc(f.s.c)}</text>`); }
   g+=`<line class="cross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" opacity="0"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
-  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Comparação das curvas de consumo de MS">${g}</svg><div class="tip"></div>`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Comparação das curvas de consumo">${g}</svg><div class="tip"></div>`;
   $("#anCmpLeg").innerHTML=series.map(s=>`<span><i class="line" style="background:${s.cor}"></i>${esc(s.c)}</span>`).join("");
   const hit=box.querySelector(".hit"), tip=box.querySelector(".tip"), cross=box.querySelector(".cross"), svg=box.querySelector("svg");
   const mover=ev=>{ const b=svg.getBoundingClientRect(), sx=(ev.clientX-b.left)*W/b.width, d=Math.round(dmin+(sx-m.l)/(W-m.l-m.r)*(dmax-dmin));
-    const linhas=series.map(s=>{ const p=s.h.find(q=>q.dias===d); return p?`<span style="color:inherit">■</span> ${esc(s.c)}: <b>${fmt(p.ms)}</b>`:null; }).filter(Boolean);
+    const linhas=series.map(s=>{ const p=s.h.find(q=>q.dias===d); return p?`<span style="color:inherit">■</span> ${esc(s.c)}: <b>${fmt(p.v)}</b>`:null; }).filter(Boolean);
     if(!linhas.length){ tip.style.opacity=0; return; }
     cross.setAttribute("x1",x(d)); cross.setAttribute("x2",x(d)); cross.setAttribute("opacity",.45);
-    tip.innerHTML=`dia ${d} · kg MS/cab<br>`+linhas.join("<br>");
+    tip.innerHTML=`dia ${d} · ${UN}<br>`+linhas.join("<br>");
     tip.style.left=Math.min(Math.max(x(d)*b.width/W,80),b.width-80)+"px"; tip.style.top=(m.t+40)*b.height/H+"px"; tip.style.opacity=1; };
   hit.addEventListener("pointermove",mover); hit.addEventListener("pointerleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
 }
@@ -1115,11 +1159,11 @@ function renderTabela(R){
       <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
     (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
   $("#tbl").querySelectorAll("th").forEach(th=>{ const c=COLS.find(c=>chaveCol(c)===th.dataset.k); if(!c||c.semOrdem) return;
-    th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(anRows()); }; });
+    th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(baiasRows()); }; });
   $("#tbl").querySelectorAll("tbody tr[data-cur]").forEach(tr=>tr.onclick=()=>openBaia(tr.dataset.cur));
 }
 $("#btnCsv").onclick=()=>{
-  const R=[...anRows()].sort(ordCurral);
+  const R=[...baiasRows()].sort(ordCurral);
   const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média 5d","Var. ontem %","Var. 5d %","Var. ontem kg","Var. 5d kg","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
   const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
   const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
@@ -1363,15 +1407,25 @@ function renderAdm(){
   const cfg=JSON.parse(JSON.stringify(getConfig(S.farm)));
   const el=$("#tab-adm");
   const numIn=(v,step=0.01,w=80)=>`<input type="number" step="${step}" value="${v}" style="width:${w}px">`;
+  // siglas e dietas que aparecem nos relatórios não podem ser apagadas (voltariam sozinhas)
+  const emUso={cts:new Set(), dietas:new Set()};
+  Object.values((DATA[S.farm]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>{ emUso.cts.add(String(r.ct)); emUso.dietas.add(r.racao); }));
+  const del = (fixo, dica) => fixo ? `<span title="${dica}" style="color:var(--muted);font-size:12px">em uso</span>` : `<button class="btn ghost small del" aria-label="Remover">✕</button>`;
+  const catRow=(c,s,info,fixo)=>`<tr><td class="l">${fixo?`<b>${esc(c)}</b><input type="hidden" data-sigla value="${esc(c)}">`:`<input type="text" data-sigla value="${esc(c)}" placeholder="ex.: BX" style="width:80px;text-transform:uppercase">`}</td>
+    <td class="l"><select data-sexo style="min-width:104px"><option ${s==="Macho"?"selected":""}>Macho</option><option ${s==="Fêmea"?"selected":""}>Fêmea</option></select></td>
+    <td class="l"><input type="text" data-info value="${esc(info)}" placeholder="ex.: Boi Nelore inteiro" style="min-width:220px"></td><td>${del(fixo,"Esta sigla aparece nos relatórios")}</td></tr>`;
+  const limRow=(d,l,fixo)=>`<tr><td class="l">${fixo?`${esc(d)}<input type="hidden" data-dieta value="${esc(d)}">`:`<input type="text" data-dieta value="${esc(d)}" placeholder="nome da dieta como no TGC" style="min-width:240px">`}</td>
+    <td>${numIn(l.ontem,0.5)}</td><td>${numIn(l.cinco,0.5)}</td><td>${numIn(l.curva,0.05)}</td><td>${numIn(l.escore,0.5)}</td><td>${d==="Padrão"?"":del(fixo,"Esta dieta aparece nos relatórios")}</td></tr>`;
   el.innerHTML=`
   <div class="adm-section card"><h3 style="margin-top:0">Coleta automática</h3><div id="statusColeta" class="loading">Carregando situação da coleta…</div></div>
   <p style="font-size:13px;color:var(--ink2)">Cadastros de <b>${esc((DATA[S.farm]||{}).nome||S.farm)}</b>. Cada confinamento tem os seus.${SRV[S.farm]&&SRV[S.farm].config_atualizado_em?" Último salvamento: "+new Date(SRV[S.farm].config_atualizado_em).toLocaleString("pt-BR")+".":" <b>Ainda com valores de exemplo.</b>"}</p>
   <div class="adm-section card">
     <h3 style="margin-top:0">Categorias (CT → sexo)</h3>
-    <p class="help">Siglas encontradas nos relatórios desta fazenda. O título da terceira coluna também é editável.</p>
-    <div class="tablewrap"><table class="edit" id="tCat"><thead><tr><th class="l">Sigla</th><th class="l">Sexo</th><th class="l" style="cursor:default"><input type="text" id="catTitulo" value="${esc(cfg.catInfoTitulo)}" aria-label="Título da coluna" style="min-width:180px;font-weight:600" title="Clique para renomear a coluna"></th></tr></thead><tbody>
-    ${Object.entries(cfg.categorias).map(([c,s])=>`<tr><td class="l"><b>${esc(c)}</b></td><td class="l"><select data-ct="${esc(c)}" style="min-width:104px"><option ${s==="Macho"?"selected":""}>Macho</option><option ${s==="Fêmea"?"selected":""}>Fêmea</option></select></td><td class="l"><input type="text" data-info="${esc(c)}" value="${esc(cfg.catInfo[c]||"")}" placeholder="ex.: Boi Nelore inteiro" style="min-width:220px"></td></tr>`).join("")}
+    <p class="help">Siglas encontradas nos relatórios desta fazenda e as que você acrescentar (por exemplo, uma categoria que ainda vai entrar). O título da terceira coluna também é editável.</p>
+    <div class="tablewrap"><table class="edit" id="tCat"><thead><tr><th class="l">Sigla</th><th class="l">Sexo</th><th class="l" style="cursor:default"><input type="text" id="catTitulo" value="${esc(cfg.catInfoTitulo)}" aria-label="Título da coluna" style="min-width:180px;font-weight:600" title="Clique para renomear a coluna"></th><th></th></tr></thead><tbody>
+    ${Object.entries(cfg.categorias).map(([c,s])=>catRow(c,s,cfg.catInfo[c]||"",emUso.cts.has(c))).join("")}
     </tbody></table></div>
+    <div class="row-actions"><button class="btn ghost small" id="addCat">+ Categoria</button></div>
   </div>
   <div class="adm-section card">
     <h3 style="margin-top:0">Curva esperada (%PV)</h3>
@@ -1391,10 +1445,11 @@ function renderAdm(){
   </div>
   <div class="adm-section card">
     <h3 style="margin-top:0">Limites de alerta por dieta</h3>
-    <p class="help">Acima destes limites a baia entra em alerta. “Padrão” vale para dietas sem linha própria.</p>
-    <div class="tablewrap"><table class="edit" id="tLim"><thead><tr><th class="l">Dieta</th><th>× ontem (±%)</th><th>× média 5d (±%)</th><th>× curva (±p.p.)</th><th>Escore (±p.p.)</th></tr></thead><tbody>
-    ${Object.entries(cfg.limites).map(([d,l])=>`<tr data-d="${esc(d)}"><td class="l">${esc(d)}</td><td>${numIn(l.ontem,0.5)}</td><td>${numIn(l.cinco,0.5)}</td><td>${numIn(l.curva,0.05)}</td><td>${numIn(l.escore,0.5)}</td></tr>`).join("")}
+    <p class="help">Acima destes limites a baia entra em alerta. “Padrão” vale para dietas sem linha própria. Use “+ Dieta” para cadastrar antes uma dieta que ainda vai entrar; o nome precisa ser igual ao que aparece no relatório do TGC.</p>
+    <div class="tablewrap"><table class="edit" id="tLim"><thead><tr><th class="l">Dieta</th><th>× ontem (±%)</th><th>× média 5d (±%)</th><th>× curva (±p.p.)</th><th>Escore (±p.p.)</th><th></th></tr></thead><tbody>
+    ${Object.entries(cfg.limites).map(([d,l])=>limRow(d,l,d==="Padrão"||emUso.dietas.has(d))).join("")}
     </tbody></table></div>
+    <div class="row-actions"><button class="btn ghost small" id="addLim">+ Dieta</button></div>
   </div>
   <div class="row-actions">
     <button class="btn" id="saveCfg">Salvar e recalcular</button>
@@ -1405,16 +1460,25 @@ function renderAdm(){
   bindDel();
   $("#addCurva").onclick=()=>{ $("#tCurva tbody").insertAdjacentHTML("beforeend",curvaRow({sexo:"Macho",pesoMin:0,pesoMax:9999,diaIni:1,diaFim:20,pv:2})); bindDel(); };
   $("#addEsc").onclick=()=>{ $("#tEsc tbody").insertAdjacentHTML("beforeend",escRow({nota:0,ajuste:0})); bindDel(); };
+  $("#addCat").onclick=()=>{ $("#tCat tbody").insertAdjacentHTML("beforeend",catRow("","Macho","",false)); bindDel(); $("#tCat tbody tr:last-child input[data-sigla]").focus(); };
+  $("#addLim").onclick=()=>{ const p=cfg.limites["Padrão"]||{ontem:5,cinco:8,curva:0.2,escore:3};
+    $("#tLim tbody").insertAdjacentHTML("beforeend",limRow("",p,false)); bindDel(); $("#tLim tbody tr:last-child input[data-dieta]").focus(); };
   $("#saveCfg").onclick=()=>{
     const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curva:[],escore:[],limites:{}};
-    el.querySelectorAll("#tCat select").forEach(s=>n.categorias[s.dataset.ct]=s.value);
-    el.querySelectorAll("#tCat input[data-info]").forEach(i=>{ if(i.value.trim()) n.catInfo[i.dataset.info]=i.value.trim(); });
+    const repetidas=[];
+    el.querySelectorAll("#tCat tbody tr").forEach(tr=>{ const sg=tr.querySelector("[data-sigla]").value.trim().toUpperCase(); if(!sg) return;
+      if(sg in n.categorias) repetidas.push(sg);
+      n.categorias[sg]=tr.querySelector("[data-sexo]").value; const inf=tr.querySelector("[data-info]").value.trim(); if(inf) n.catInfo[sg]=inf; });
     el.querySelectorAll("#tCurva tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input,select");
       n.curva.push({sexo:i[0].value,pesoMin:+i[1].value,pesoMax:+i[2].value,diaIni:+i[3].value,diaFim:+i[4].value,pv:+i[5].value}); });
     el.querySelectorAll("#tEsc tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input"); n.escore.push({nota:+i[0].value,ajuste:+i[1].value}); });
     n.escore.sort((a,b)=>a.nota-b.nota);
-    el.querySelectorAll("#tLim tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input");
-      n.limites[tr.dataset.d]={ontem:+i[0].value,cinco:+i[1].value,curva:+i[2].value,escore:+i[3].value}; });
+    el.querySelectorAll("#tLim tbody tr").forEach(tr=>{ const nome=tr.querySelector("[data-dieta]").value.trim(); if(!nome) return;
+      if(nome in n.limites) repetidas.push(nome);
+      const i=tr.querySelectorAll("input[type=number]");
+      n.limites[nome]={ontem:+i[0].value,cinco:+i[1].value,curva:+i[2].value,escore:+i[3].value}; });
+    if(repetidas.length){ $("#savedMsg").style.color="var(--crit)"; $("#savedMsg").textContent="Linha repetida: "+[...new Set(repetidas)].join(", ")+". Ajuste antes de salvar."; return; }
+    $("#savedMsg").style.color="";
     $("#saveCfg").disabled=true; $("#savedMsg").textContent="Salvando…";
     rpc("salvar_config",{p_token:S.sessao.token,p_fazenda:S.farm,p_dados:n}).then(async quando=>{
       const c = await IDB.get("dados:"+S.farm) || {nome:(DATA[S.farm]||{}).nome, baias:[], relatorios:[]};
