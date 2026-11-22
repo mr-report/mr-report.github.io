@@ -2,9 +2,9 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mr. Report – Análise de Confinamento</title>
-<meta name="theme-color" content="#2a78d6">
+<meta name="theme-color" content="#023577">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icone.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icone-192.png">
@@ -12,73 +12,181 @@
 <script src="config.js"></script>
 <style>
 :root{
-  --bg:#f9f9f7; --surface:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984;
-  --line:#e6e5e0; --accent:#2a78d6; --accent-soft:#e6f0fb;
-  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
-  --good-bg:#e8f6e8; --warn-bg:#fff5df; --crit-bg:#fbeaea;
-  --radius:12px;
+  /* marca */
+  --primary:#023577; --primary-2:#0a4a9c; --secondary:#CCD101; --secondary-ink:#023577;
+  /* superfícies e textos */
+  --bg:#f4f6f9; --surface:#f8f9fb; --card:#ffffff; --ink:#0d1b2e; --ink2:#4d5a6b; --muted:#8a94a3;
+  --line:#e2e6ec; --accent:#023577; --accent-soft:#e7eef8;
+  /* status (reservados para alertas) */
+  --good:#0f8a3c; --warn:#e0a100; --serious:#ec835a; --crit:#cc3333;
+  --good-bg:#e6f5ec; --warn-bg:#fff4d6; --crit-bg:#fbe9e9;
+  /* séries da comparação de curvas (paleta validada para daltonismo) */
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+  --radius:14px;
 }
 @media (prefers-color-scheme:dark){
-  :root{ --bg:#0d0d0d; --surface:#1a1a19; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e88;
-    --line:#2e2e2c; --accent:#3987e5; --accent-soft:#1b2a3d; --good-bg:#132613; --warn-bg:#2e250f; --crit-bg:#2f1616; }
+  :root{ --bg:#0b1220; --surface:#121b2b; --card:#131d2e; --ink:#eef2f7; --ink2:#b4bfcd; --muted:#8792a2;
+    --line:#26324a; --accent:#8fb3ec; --accent-soft:#1a2a45;
+    --good-bg:#11261a; --warn-bg:#2c240c; --crit-bg:#2e1515;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#0ca30c; }
 }
 *{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4}
 button,input,select{font:inherit;color:inherit}
 .hidden{display:none!important}
-/* login */
-#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.login-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:100%;max-width:360px}
-.login-box h1{font-size:22px;margin:0 0 4px}
+/* ---------- login ---------- */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--primary)}
+.login-box{background:var(--card);border-radius:18px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.logo i{width:34px;height:34px;border-radius:9px;background:var(--primary);display:inline-flex;align-items:center;justify-content:center}
+.logo i:after{content:"";width:12px;height:12px;border-radius:50%;background:var(--secondary)}
+.login-box h1{font-size:24px;margin:0;color:var(--primary)}
+@media (prefers-color-scheme:dark){.login-box h1{color:var(--ink)}}
 .login-box p{color:var(--ink2);margin:0 0 18px;font-size:14px}
 .field{display:block;margin-bottom:12px}
 .field span{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
-input[type=password],input[type=text],input[type=number],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
-.btn{border:0;background:var(--accent);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+input[type=password],input[type=text],input[type=number],input[type=search],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+input:focus,select:focus{outline:2px solid var(--secondary);outline-offset:1px}
+.btn{border:0;background:var(--primary);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+.btn:hover{background:var(--primary-2)}
+.btn.lime{background:var(--secondary);color:var(--secondary-ink)}
 .btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
 .btn.small{padding:6px 10px;font-size:13px;font-weight:500}
 .btn.block{width:100%}
+.btn:disabled{opacity:.6;cursor:default}
 .err{color:var(--crit);font-size:13px;min-height:18px;margin-top:8px}
-.demo{margin-top:18px;padding:12px;border-radius:10px;background:var(--accent-soft);font-size:13px;color:var(--ink2)}
-.demo code{background:var(--card);padding:1px 6px;border-radius:6px;color:var(--ink)}
-/* app shell */
-header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
-.bar{display:flex;align-items:center;gap:10px;padding:10px 16px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
-.brand{font-weight:700;font-size:17px;margin-right:auto}
-.brand small{display:block;font-weight:400;color:var(--ink2);font-size:12px}
-.bar select{width:auto;padding:7px 10px}
-nav{display:flex;gap:4px;max-width:1100px;margin:0 auto;padding:0 12px;overflow-x:auto}
-nav button{background:none;border:0;padding:10px 12px;border-bottom:2px solid transparent;color:var(--ink2);cursor:pointer;white-space:nowrap}
-nav button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
-main{max-width:1100px;margin:0 auto;padding:16px}
-.proto{font-size:12px;color:var(--ink2);background:var(--warn-bg);border-radius:8px;padding:8px 12px;margin-bottom:14px}
-/* KPIs */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
-.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
-.kpi .l{font-size:12px;color:var(--ink2)}
-.kpi .v{font-size:24px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
-.kpi .s{font-size:12px;color:var(--muted)}
+/* ---------- cabeçalho ---------- */
+header{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padding-top:env(safe-area-inset-top)}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 16px 6px;max-width:1280px;margin:0 auto;flex-wrap:wrap}
+.brand{font-weight:700;font-size:17px;margin-right:auto;display:flex;align-items:center;gap:8px;min-width:0}
+.brand:before{content:"";flex:0 0 10px;height:10px;border-radius:50%;background:var(--secondary)}
+.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:600px){.brand{flex:1 0 100%}}
+.brand small{font-weight:400;color:rgba(255,255,255,.75);font-size:12px;white-space:nowrap}
+header select{width:auto;max-width:46vw;padding:6px 10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:9px}
+header select option{color:#0d1b2e}
+header .btn.ghost{color:#fff;border-color:rgba(255,255,255,.35)}
+.sync{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.8);max-width:1280px;margin:0 auto;padding:0 16px 6px}
+.sync .off{background:var(--warn-bg);color:#7a5600;border-radius:999px;padding:1px 8px;font-weight:600}
+.sync b{color:#fff}
+.sync button{background:var(--secondary);border:0;color:var(--secondary-ink);cursor:pointer;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+nav{display:flex;gap:2px;max-width:1280px;margin:0 auto;padding:0 10px;overflow-x:auto;scrollbar-width:none}
+nav button{background:none;border:0;padding:10px 12px 9px;border-bottom:3px solid transparent;color:rgba(255,255,255,.72);cursor:pointer;white-space:nowrap;font-weight:500}
+nav button.on{color:#fff;border-bottom-color:var(--secondary);font-weight:700}
+main{max-width:1280px;margin:0 auto;padding:16px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.proto{font-size:12px;color:var(--ink2);background:var(--warn-bg);border-radius:10px;padding:8px 12px;margin-bottom:14px}
 h2{font-size:17px;margin:20px 0 10px}
-h3{font-size:15px;margin:16px 0 8px}
+h3{font-size:15px;margin:0 0 10px;color:var(--ink)}
+h3 small{font-weight:400;color:var(--ink2);font-size:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
-/* alerts */
-.alerts{display:grid;gap:8px}
-.alert{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:10px 12px;cursor:pointer}
-.alert.alto{border-left-color:var(--crit)}
-.alert.medio{border-left-color:var(--warn)}
-.alert .cur{font-weight:700;min-width:54px}
-.alert .msg{font-size:14px}
-.alert .msg small{display:block;color:var(--ink2);font-size:12px}
+.loading{color:var(--ink2);padding:24px 0;text-align:center}
 .empty{color:var(--ink2);font-size:14px;padding:12px}
-/* chips */
-.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:999px;white-space:nowrap;font-weight:600}
+/* ---------- chips, status ---------- */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap;font-weight:600}
 .chip.ok{background:var(--good-bg);color:var(--good)}
-.chip.medio{background:var(--warn-bg);color:#9a6a00}
+.chip.medio{background:var(--warn-bg);color:#8a6200}
 .chip.alto{background:var(--crit-bg);color:var(--crit)}
 @media (prefers-color-scheme:dark){.chip.medio{color:var(--warn)}}
-/* table */
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.filters select,.filters input{width:auto;min-width:140px;padding:7px 10px}
+.up{color:var(--good)} .down{color:var(--crit)}
+/* ---------- gráficos ---------- */
+.chart{position:relative;touch-action:pan-y}
+.chart svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--primary);color:#fff;font-size:12px;padding:6px 9px;border-radius:8px;white-space:nowrap;transform:translate(-50%,-115%);opacity:0;transition:opacity .1s;z-index:2;line-height:1.35}
+@media (prefers-color-scheme:dark){.tip{background:#eef2f7;color:#0d1b2e}}
+.legend{display:flex;gap:6px 14px;font-size:12px;color:var(--ink2);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.legend i.line{width:16px;height:3px;border-radius:2px;vertical-align:3px;background:var(--muted)}
+.legend i.dash{width:16px;height:0;border-top:2px dashed var(--ink2);border-radius:0;vertical-align:3px;background:none}
+.note{font-size:12px;color:var(--ink2);margin-top:6px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:5px 11px;font-size:12px;cursor:pointer;color:var(--ink2);font-weight:600}
+.seg button.on{background:var(--primary);color:#fff}
+/* ---------- VISTORIA (celular) ---------- */
+.vt{max-width:560px;margin:0 auto}
+.vt-nav{display:flex;align-items:stretch;gap:8px;margin-bottom:6px}
+.vt-arrow{flex:0 0 52px;border:0;border-radius:14px;background:var(--primary);color:#fff;font-size:28px;line-height:1;cursor:pointer}
+.vt-arrow:disabled{opacity:.35}
+.vt-pick{flex:1;border:1px solid var(--line);background:var(--card);border-radius:14px;padding:8px 12px;cursor:pointer;text-align:center}
+.vt-pick b{display:block;font-size:22px;color:var(--primary);letter-spacing:.3px}
+@media (prefers-color-scheme:dark){.vt-pick b{color:var(--ink)}}
+.vt-pick small{color:var(--ink2);font-size:12px}
+.vt-prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:10px}
+.vt-prog i{display:block;height:100%;background:var(--secondary)}
+.vt-card{display:grid;gap:10px}
+.vt-card.anim-l{animation:entraE .22s ease-out}.vt-card.anim-r{animation:entraD .22s ease-out}
+@keyframes entraE{from{transform:translateX(40px);opacity:.3}to{transform:none;opacity:1}}
+@keyframes entraD{from{transform:translateX(-40px);opacity:.3}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.vt-card.anim-l,.vt-card.anim-r{animation:none}}
+.vt-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:2px 2px 0}
+.vt-head b{font-size:15px}
+.vt-head small{display:block;color:var(--ink2);font-size:12px;margin-top:2px}
+.vt-sec{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.vt-sec h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink2);margin:0 0 8px;font-weight:700}
+.vt-sec-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.vt-sec-h h3{margin:0}
+.tiles{display:grid;gap:8px}
+.tiles.t3{grid-template-columns:repeat(3,1fr)}
+.tiles.t2{grid-template-columns:repeat(2,1fr)}
+.tile{background:var(--surface);border-radius:11px;padding:9px 10px;border:1px solid var(--line);min-width:0}
+.tile span{display:block;font-size:11px;color:var(--ink2);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.tile b{display:block;font-size:24px;font-variant-numeric:tabular-nums;line-height:1.15;margin-top:2px;white-space:nowrap}
+.tile small{display:block;font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.dest{background:var(--primary);border-color:var(--primary);color:#fff}
+.tile.dest span,.tile.dest small{color:rgba(255,255,255,.8)}
+.tile.dest b{color:var(--secondary)}
+.tile.cmp.ok b{color:var(--good)} .tile.cmp.medio b{color:#b07d00} .tile.cmp.alto b{color:var(--crit)}
+.tile.cmp.alto{background:var(--crit-bg);border-color:transparent} .tile.cmp.medio{background:var(--warn-bg);border-color:transparent}
+@media (prefers-color-scheme:dark){.tile.cmp.medio b{color:var(--warn)}}
+.score{display:flex;gap:6px}
+.score span{flex:1;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 0;font-weight:700;font-variant-numeric:tabular-nums}
+.score span small{display:block;font-weight:400;font-size:11px;color:var(--ink2)}
+details.vt-sec summary{cursor:pointer;font-weight:600;font-size:14px}
+.vt-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink2)}
+.vt-foot label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.check{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.check:last-child{border-bottom:0}
+.check b{display:block;font-size:14px}
+.check p{margin:2px 0 0;font-size:13px;color:var(--ink2)}
+.ico{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.ico.ok{background:var(--good)} .ico.medio{background:var(--warn);color:#3a2a00} .ico.alto{background:var(--crit)}
+/* seletor rápido de baias */
+.pk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin-top:10px}
+.pk-grid button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 4px;font-weight:700;cursor:pointer;position:relative}
+.pk-grid button.atual{outline:2px solid var(--secondary);outline-offset:1px}
+.pk-grid button i{position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%}
+.pk-grid button i.alto{background:var(--crit)} .pk-grid button i.medio{background:var(--warn)}
+/* ---------- ANÁLISE (computador) ---------- */
+.an-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.an-filters select,.an-filters input{width:auto;min-width:150px;padding:8px 10px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;border-top:3px solid var(--primary)}
+.kpi .l{font-size:12px;color:var(--ink2);font-weight:600}
+.kpi .v{font-size:26px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;color:var(--primary)}
+@media (prefers-color-scheme:dark){.kpi .v{color:var(--ink)}}
+.kpi .s{font-size:12px;color:var(--ink2)}
+.an-grid{display:grid;gap:12px;margin-bottom:12px}
+@media(min-width:980px){.an-grid.c2{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)} .an-grid.c2b{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.an-scroll{max-height:330px;overflow:auto}
+.alerts{display:grid;gap:8px}
+.alert{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:9px 12px;cursor:pointer}
+.alert.alto{border-left-color:var(--crit)} .alert.medio{border-left-color:var(--warn)}
+.alert .cur{font-weight:700;min-width:54px;color:var(--primary)}
+@media (prefers-color-scheme:dark){.alert .cur{color:var(--ink)}}
+.alert .msg{font-size:14px}
+.alert .msg small{display:block;color:var(--ink2);font-size:12px}
+.heat{overflow-x:auto}
+.heat table{border-collapse:separate;border-spacing:2px;font-size:11px;width:auto}
+.heat th{position:static;background:none;font-weight:600;color:var(--ink2);padding:2px 4px;cursor:default;text-align:center}
+.heat td{width:30px;height:22px;padding:0;border-radius:4px;cursor:pointer;border:0}
+.heat td.lbl{width:auto;text-align:right;padding-right:8px;font-weight:700;background:none;color:var(--ink);white-space:nowrap;position:static}
+.heat td.vazio{background:repeating-linear-gradient(45deg,var(--line),var(--line) 2px,transparent 2px,transparent 5px);cursor:default}
+.heat-leg{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);margin-top:8px}
+.heat-leg .bar{height:10px;width:180px;border-radius:5px;padding:0;margin:0}
+.cmp-sel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.cmp-sel button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;font-weight:600}
+.cmp-sel button.on{color:#fff;border-color:transparent}
+.cmp-sel input{width:150px;padding:4px 10px;border-radius:999px;font-size:12px}
 .tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
 table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
@@ -86,50 +194,26 @@ th{font-size:12px;color:var(--ink2);font-weight:600;background:var(--surface);po
 th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--card)}
 th:first-child{background:var(--surface);z-index:1}
 td.l,th.l{text-align:left}
-tbody tr{cursor:pointer}
-tbody tr:hover td{background:var(--accent-soft)}
-.up{color:var(--good)} .down{color:var(--crit)}
-/* chart */
-.chart{position:relative}
-.chart svg{width:100%;height:auto;display:block}
-.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .1s}
-.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-top:6px;flex-wrap:wrap}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
-.legend i.line{width:16px;height:2px;border-radius:0;vertical-align:3px;background:var(--muted)}
-/* modal */
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+#tbl tbody tr,#anDietas tbody tr{cursor:pointer}
+#tbl tbody tr:hover td,#anDietas tbody tr:hover td{background:var(--accent-soft)}
+.spark{vertical-align:middle}
+/* ---------- modal ---------- */
+#modal{position:fixed;inset:0;background:rgba(2,20,50,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 @media(min-width:700px){#modal{align-items:center}}
-.sheet{background:var(--card);width:100%;max-width:620px;max-height:90vh;overflow:auto;border-radius:16px 16px 0 0;padding:18px}
-@media(min-width:700px){.sheet{border-radius:16px}}
+.sheet{background:var(--card);width:100%;max-width:640px;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.sheet{border-radius:18px}}
 .sheet h2{margin:0 0 2px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .mini{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .mini .l{font-size:11px;color:var(--ink2)}
 .mini .v{font-weight:700;font-variant-numeric:tabular-nums}
-.check{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
-.check:last-child{border-bottom:0}
-.check b{display:block;font-size:14px}
-.check p{margin:2px 0 0;font-size:13px;color:var(--ink2)}
-.ico{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
-.ico.ok{background:var(--good)} .ico.medio{background:var(--warn);color:#3a2a00} .ico.alto{background:var(--crit)}
-.score{display:flex;gap:6px}
-.score span{flex:1;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 0;font-weight:700}
-.score span small{display:block;font-weight:400;font-size:11px;color:var(--ink2)}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
-.seg button{border:0;background:transparent;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink2)}
-.seg button.on{background:var(--accent);color:#fff}
-.note{font-size:12px;color:var(--ink2);margin-top:6px}
-/* admin */
+/* ---------- administração ---------- */
 .adm-section{margin-bottom:18px}
 .adm-section p.help{font-size:13px;color:var(--ink2);margin:0 0 10px}
 .edit td{padding:4px 6px}
 .edit input,.edit select{padding:6px 8px;font-size:13px;min-width:70px}
 .row-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .saved{font-size:13px;color:var(--good);align-self:center}
-.sync{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);max-width:1100px;margin:0 auto;padding:0 16px 8px}
-.sync .off{background:var(--warn-bg);color:#9a6a00;border-radius:999px;padding:1px 8px;font-weight:600}
-.sync button{background:none;border:0;color:var(--accent);cursor:pointer;font-size:12px;padding:0}
-.loading{color:var(--ink2);padding:24px 0;text-align:center}
 .status-grid{display:grid;gap:8px}
 .st-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
 .st-row:last-child{border-bottom:0}
@@ -142,65 +226,68 @@ tbody tr:hover td{background:var(--accent-soft)}
 
 <section id="login">
   <form class="login-box" id="loginForm">
-    <h1>Mr. Report</h1>
-    <p>Entre com a senha da sua fazenda.</p>
+    <div class="logo"><i></i><h1>Mr. Report</h1></div>
+    <p>Análise diária do confinamento. Entre com a senha da sua fazenda.</p>
     <label class="field"><span>Senha</span><input type="password" id="pwd" autocomplete="current-password" required></label>
     <button class="btn block" type="submit" id="btnEntrar">Entrar</button>
     <div class="err" id="loginErr"></div>
-
   </form>
 </section>
 
 <section id="app" class="hidden">
   <header>
     <div class="bar">
-      <div class="brand" id="brand">–<small id="brandSub"></small></div>
+      <div class="brand" id="brand"><span id="brandNome">–</span><small id="brandSub"></small></div>
       <select id="farmSel" class="hidden" aria-label="Confinamento"></select>
       <select id="dateSel" aria-label="Data do relatório"></select>
       <button class="btn ghost small" id="logout">Sair</button>
     </div>
     <div class="sync" id="sync"></div>
     <nav id="tabs">
-      <button data-tab="painel" class="on">Painel</button>
-      <button data-tab="baias">Baias</button>
-      <button data-tab="adm" class="adm-only hidden">Cadastros (ADM)</button>
-      <button data-tab="fazendas" class="adm-only hidden">Fazendas (ADM)</button>
+      <button data-tab="vistoria">Vistoria</button>
+      <button data-tab="analise">Análise</button>
+      <button data-tab="adm" class="adm-only hidden">Cadastros</button>
+      <button data-tab="fazendas" class="adm-only hidden">Fazendas</button>
     </nav>
   </header>
   <main>
     <div class="proto hidden" id="avisoCfg">Esta fazenda ainda usa os <b>cadastros de exemplo</b> (curva, escore, limites). O administrador ajusta em “Cadastros”.</div>
     <div class="loading hidden" id="vazio"></div>
-
-    <div id="tab-painel" class="tabc">
-      <div class="filters">
-        <select id="pSexo" aria-label="Sexo"><option value="">Todos os sexos</option><option>Macho</option><option>Fêmea</option></select>
-        <select id="pDieta" aria-label="Dieta"></select>
-      </div>
-      <div class="kpis" id="kpis"></div>
-      <h2>Alertas do dia</h2>
-      <div class="alerts" id="alerts"></div>
-      <h2>Consumo (%PV) × curva esperada <small id="chartFiltro" style="font-weight:400;color:var(--ink2);font-size:13px"></small></h2>
-      <div class="card">
-        <div class="chart" id="chart"></div>
-        <div class="legend" id="chartLegend"></div>
-      </div>
-    </div>
-
-    <div id="tab-baias" class="hidden tabc">
-      <div class="filters">
-        <input type="text" id="fBusca" placeholder="Buscar curral…">
-        <select id="fDieta"></select>
-        <select id="fStatus">
+    <div id="tab-vistoria" class="hidden tabc"></div>
+    <div id="tab-analise" class="hidden tabc">
+      <div class="an-filters">
+        <select id="aSexo" aria-label="Sexo"><option value="">Todos os sexos</option><option>Macho</option><option>Fêmea</option></select>
+        <select id="aDieta" aria-label="Dieta"></select>
+        <select id="aStatus" aria-label="Status">
           <option value="">Todos os status</option>
+          <option value="alerta">Com alerta (alto + médio)</option>
           <option value="alto">Só alertas altos</option>
-          <option value="medio">Alertas (alto + médio)</option>
           <option value="ok">Sem alerta</option>
         </select>
+        <input type="search" id="aBusca" placeholder="Buscar curral…" aria-label="Buscar curral">
+        <span id="aResumo" style="font-size:12px;color:var(--ink2)"></span>
       </div>
-      <div class="tablewrap"><table id="tbl"></table></div>
-      <p style="font-size:12px;color:var(--ink2)">Toque em uma baia para ver o detalhe. Toque no cabeçalho para ordenar.</p>
+      <div class="kpis" id="anKpis"></div>
+      <div class="an-grid c2">
+        <div class="card"><h3>Alertas do dia</h3><div class="alerts an-scroll" id="anAlerts"></div></div>
+        <div class="card"><h3>Consumo (%PV) × dias de cocho <small>pontos = baias · tracejado = curva esperada</small></h3><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <h3>Mapa de variação do consumo <small>MS do dia × média dos 5 dias anteriores, por relatório · toque numa célula para abrir a baia</small></h3>
+        <div class="heat" id="anHeat"></div>
+      </div>
+      <div class="an-grid c2b">
+        <div class="card"><h3>Comparar curvas de consumo <small>kg MS/cab por dias de cocho · escolha até 6 baias</small></h3><div class="cmp-sel" id="anCmpSel"></div><div class="chart" id="anCmp"></div><div class="legend" id="anCmpLeg"></div></div>
+        <div class="card"><h3>Resumo por dieta <small>médias ponderadas por cabeças</small></h3><div class="tablewrap"><table id="anDietas"></table></div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <h3 style="margin:0">Todas as baias <small>clique no cabeçalho para ordenar · na linha para abrir</small></h3>
+          <button class="btn ghost small" id="btnCsv">Baixar planilha (CSV)</button>
+        </div>
+        <div class="tablewrap" style="border:0"><table id="tbl"></table></div>
+      </div>
     </div>
-
     <div id="tab-adm" class="hidden"></div>
     <div id="tab-fazendas" class="hidden"></div>
   </main>
@@ -426,7 +513,7 @@ function analisar(farmId, data){
 }
 
 /* ---------- estado e navegação ---------- */
-const S = { user:null, farm:null, data:null, tab:"painel", sort:{k:"sev",dir:-1}, rows:[] };
+const S = { user:null, farm:null, data:null, tab:"vistoria", sort:{k:"sev",dir:-1}, rows:null };
 const $ = s=>document.querySelector(s);
 const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const dateKey = d=>{const [a,b,c]=d.split("/");return c+b+a;};
@@ -463,7 +550,8 @@ function iniciar(sessao){
   $("#farmSel").classList.toggle("hidden", !S.user.admin || fz.length<2);
   $("#farmSel").innerHTML = fz.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
   const ultima = LS.get("ultimaFazenda");
-  setTab("painel");
+  const abaSalva = LS.get("aba");
+  setTab(["vistoria","analise"].includes(abaSalva) ? abaSalva : (window.innerWidth < 900 ? "vistoria" : "analise"));
   if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
   else if(S.user.admin){ mostrarVazio("Nenhuma fazenda cadastrada ainda."); setTab("fazendas"); }
   else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
@@ -474,7 +562,7 @@ function renderSync(){
   const s = syncMsg, srv = SRV[S.farm];
   const quando = srv && srv.gerado_em ? new Date(srv.gerado_em) : null;
   $("#sync").innerHTML =
-    (s.carregando ? esc(s.texto || "Atualizando…") : quando ? "Dados atualizados em " + quando.toLocaleDateString("pt-BR") + " às " + quando.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "Ainda sem dados neste aparelho") +
+    (s.carregando ? esc(s.texto || "Atualizando…") : quando ? "Atualizado em " + quando.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}) + " às " + quando.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "Ainda sem dados neste aparelho") +
     (s.off ? ' <span class="off">offline</span>' : "") + (s.erro ? ' <span class="off">'+esc(s.erro)+'</span>' : "") +
     (s.info && !s.carregando ? ' · <b>'+esc(s.info)+'</b>' : "") +
     (s.carregando || buscando ? "" : ' · <button id="btnSync" title="Pede ao robô para conferir o e-mail agora">Atualizar</button>');
@@ -531,13 +619,13 @@ function ultimoProcessado(fid){
 function mostrarVazio(msg){
   $("#vazio").textContent = msg; $("#vazio").classList.remove("hidden");
   document.querySelectorAll(".tabc").forEach(el=>el.classList.add("hidden-vazio"));
-  $("#tab-painel").classList.add("hidden"); $("#tab-baias").classList.add("hidden");
+  $("#tab-vistoria").classList.add("hidden"); $("#tab-analise").classList.add("hidden");
 }
 
 async function setFarm(id, soRede){
   S.farm=id; $("#farmSel").value=id; LS.set("ultimaFazenda", id);
   const nomeSessao = ((S.sessao.fazendas||[]).find(f=>f.id===id)||{}).nome || id;
-  $("#brand").firstChild.textContent = nomeSessao;
+  $("#brandNome").textContent = nomeSessao;
   // 1) mostra na hora o que já está guardado no aparelho (funciona offline)
   if(!soRede){ const c = await IDB.get("dados:"+id); if(c){ montar(id, c); mostrarFazenda(); } }
   // 2) busca novidades no banco
@@ -561,7 +649,7 @@ function alertaSessao(){
 }
 function mostrarFazenda(){
   const id = S.farm, f = DATA[id];
-  $("#brand").firstChild.textContent = f.nome;
+  $("#brandNome").textContent = f.nome;
   const datas = Object.keys(f.relatorios).sort((a,b)=>dateKey(b).localeCompare(dateKey(a)));
   renderSync();
   if(!datas.length){ mostrarVazio("Nenhum relatório recebido ainda para esta fazenda. Assim que o primeiro PDF chegar no e-mail, ele aparece aqui."); $("#dateSel").innerHTML=""; if(S.tab==="adm") renderAdm(); return; }
@@ -573,7 +661,7 @@ function mostrarFazenda(){
   const mantem = datas.includes(atual) && S.dataFarm===id && atual !== S.maisRecente;
   S.data = mantem ? atual : datas[0]; S.dataFarm = id; S.maisRecente = datas[0];
   $("#dateSel").value = S.data;
-  $("#avisoCfg").classList.toggle("hidden", !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
+  $("#avisoCfg").classList.toggle("hidden", !S.user.admin || !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
   refresh();
 }
 const abaAdm = t => t==="adm" || t==="fazendas";
@@ -581,65 +669,280 @@ function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["painel","baias","adm","fazendas"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
+  ["vistoria","analise","adm","fazendas"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
   $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
+  if(!abaAdm(t)) LS.set("aba", t);
+  if(t==="vistoria" && S.rows) renderVistoria();
+  if(t==="analise" && S.rows) renderAnalise();
   if(t==="adm") renderAdm();
   if(t==="fazendas") renderFazendas();
 }
 function refresh(){
   if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
   S.rows = analisar(S.farm,S.data);
-  $("#brandSub").textContent = "Relatório de "+S.data+" · "+(S.user.admin?"Administrador":"Consulta");
-  renderPainel(); renderFiltros(); renderTabela();
+  $("#brandSub").textContent = S.user.admin ? "ADM" : "";
+  if(S.tab==="vistoria") renderVistoria();
+  if(S.tab==="analise") renderAnalise();
   if(S.tab==="adm") renderAdm();
 }
 
-/* ---------- painel ---------- */
-function painelRows(){
-  const sx=$("#pSexo").value, d=$("#pDieta").value;
-  return S.rows.filter(r=>(!sx||r.sexo===sx)&&(!d||r.racao===d));
+/* =====================================================================
+   TELAS: Vistoria (celular) e Análise (computador)
+   ===================================================================== */
+const ordCurral = (a,b)=>String(a.curral).localeCompare(String(b.curral),"pt-BR",{numeric:true});
+const LBL = {ok:"OK", medio:"Atenção", alto:"Alerta"};
+const nivel = (v, lim)=> v==null||isNaN(v) ? "" : Math.abs(v)>lim*2 ? "alto" : Math.abs(v)>lim ? "medio" : "ok";
+const seta = v => v==null||isNaN(v) ? "" : v>0.05 ? "▲ " : v<-0.05 ? "▼ " : "";
+const escuro = () => window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+const corVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ---------- histórico por baia (a partir dos relatórios guardados) ---------- */
+const parseD=s=>{const [d,m,y]=s.split("/").map(Number);return new Date(y<100?2000+y:y,m-1,d);};
+const addDays=(dt,n)=>{const x=new Date(dt);x.setDate(x.getDate()+n);return x;};
+const fmtD=dt=>dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
+function datasAte(farmId, ate){
+  return Object.keys(DATA[farmId].relatorios).filter(d=>!ate || dateKey(d)<=dateKey(ate)).sort((a,b)=>dateKey(a).localeCompare(dateKey(b)));
 }
-function renderPainel(){
-  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort(), cur=$("#pDieta").value;
-  $("#pDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
-  const R=painelRows();
-  if(!R.length){ $("#kpis").innerHTML=`<div class="empty">Nenhuma baia com esses filtros.</div>`; $("#alerts").innerHTML=""; $("#chart").innerHTML=""; $("#chartLegend").innerHTML=""; return; }
-  const cab=R.reduce((s,r)=>s+r.cab,0);
-  const w=(k)=>R.reduce((s,r)=>s+r[k]*r.cab,0)/cab;
-  const msHoje=w("cons_dia_ms"), msOntem=w("ms_1d"), ms5=w("ms_5d");
-  const nAlto=R.filter(r=>r.sev==="alto").length, nMed=R.filter(r=>r.sev==="medio").length;
-  $("#kpis").innerHTML = `
-    <div class="kpi"><div class="l">Baias · cabeças</div><div class="v">${R.length} · ${cab.toLocaleString("pt-BR")}</div><div class="s">ativas no relatório</div></div>
-    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(msHoje)}</div><div class="s">${pct((msHoje-msOntem)/msOntem*100)} × ontem · ${pct((msHoje-ms5)/ms5*100)} × 5d</div></div>
-    <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(w("cons_dia_pv"))}%</div><div class="s">ponderada por cabeças</div></div>
-    <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nAlto+nMed}</div><div class="s"><span class="chip alto">${nAlto} alto</span> <span class="chip medio">${nMed} médio</span></div></div>`;
-  const list = R.filter(r=>r.alertas.length).sort((a,b)=>SEV[b.sev]-SEV[a.sev]||b.alertas.length-a.alertas.length);
-  $("#alerts").innerHTML = list.length ? list.map(r=>{
+function acharBaia(lista, r){ return lista.find(o=>o.lote===r.lote && o.curral===r.curral) || lista.find(o=>o.lote===r.lote); }
+const _histCache = new Map();
+function historico(farmId, r){
+  const chave = farmId+"|"+S.data+"|"+r.lote+"|"+r.curral+"|"+Object.keys(DATA[farmId].relatorios).length;
+  if(_histCache.has(chave)) return _histCache.get(chave);
+  const rel=DATA[farmId].relatorios, pts={};
+  datasAte(farmId, S.data).forEach(d=>{
+    const x=acharBaia(rel[d], r); if(!x) return;
+    const dt=parseD(d);
+    pts[dt.getTime()]={dt,dias:x.dias_conf,ms:x.cons_dia_ms,mn:x.cons_dia_mn,pv:x.cons_dia_pv,racao:x.racao,src:"rel"};
+    const on=addDays(dt,-1);   // o relatório também traz o consumo de ontem
+    if(!pts[on.getTime()]) pts[on.getTime()]={dt:on,dias:x.dias_conf-1,ms:x.ms_1d,mn:x.mn_1d,pv:x.ims_pv_1d,racao:x.racao,src:"rel"};
+  });
+  const arr=Object.values(pts).sort((a,b)=>a.dt-b.dt);
+  if(_histCache.size>400) _histCache.clear();
+  _histCache.set(chave, arr);
+  return arr;
+}
+function trocasDeDieta(h){
+  const out=[]; for(let i=1;i<h.length;i++) if(h[i].racao!==h[i-1].racao) out.push({de:h[i-1].racao,para:h[i].racao,p:h[i]});
+  return out;
+}
+
+/* ---------- curva de consumo de uma baia (usada na Vistoria e no detalhe) ---------- */
+function desenharCurva(box, legEl, noteEl, r, modo, H){
+  if(!box) return;
+  const h=historico(S.farm,r), cfg=getConfig(S.farm), tr=trocasDeDieta(h);
+  const key=modo==="pv"?"pv":"ms";
+  const W=Math.max(280,box.clientWidth||520), m={l:40,r:10,t:24,b:28};
+  if(!h.length){ box.innerHTML=`<div class="empty">Sem histórico para esta baia.</div>`; if(legEl) legEl.innerHTML=""; return; }
+  const dmin=h[0].dias, dmax=Math.max(h[h.length-1].dias, dmin+1);
+  let vals=h.map(p=>p[key]).filter(v=>v!=null);
+  const espPts=[];
+  if(modo==="pv" && r.sexo){
+    for(let d=dmin; d<=dmax; d++){ const e=esperado(cfg,{...r,dias_conf:d}); if(e.pv!=null) espPts.push({d,v:e.pv}); }
+    vals=vals.concat(espPts.map(p=>p.v));
+  }
+  let lo=Math.min(...vals), hi=Math.max(...vals), pad=(hi-lo)*0.15||(key==="pv"?0.3:1); lo=Math.max(0,lo-pad); hi+=pad;
+  const x=d=>m.l+(d-dmin)/(dmax-dmin)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  let g="";
+  const casas=(hi-lo)<1.5?2:1;
+  for(let i=0;i<=3;i++){ const v=lo+(hi-lo)*i/3; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,casas)}</text>`; }
+  const span=dmax-dmin, step=span<=12?2:span<=30?5:span<=80?10:20;
+  for(let d=Math.ceil(dmin/step)*step; d<=dmax; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+15}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
+  g+=`<text x="${W-m.r}" y="${H-2}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
+  // períodos de dieta: faixa clara alternada + linha e etiqueta na troca
+  tr.forEach((t,i)=>{ const xx=x(t.p.dias)-0.5*(x(dmin+1)-x(dmin));
+    g+=`<line x1="${xx}" x2="${xx}" y1="${m.t-4}" y2="${H-m.b}" stroke="#a9ad00" stroke-width="2"/>
+        <rect x="${Math.min(xx-1,W-m.r-62)}" y="2" width="62" height="17" rx="8" fill="var(--secondary)"/>
+        <text x="${Math.min(xx-1,W-m.r-62)+31}" y="14" text-anchor="middle" font-size="10.5" font-weight="700" fill="#023577">dieta ${fmtD(t.p.dt)}</text>`; });
+  if(espPts.length){ let p=""; espPts.forEach((q,i)=>p+=(i?"L":"M")+x(q.d)+","+y(q.v)); g+=`<path d="${p}" fill="none" stroke="var(--ink2)" stroke-width="1.5" stroke-dasharray="6 4"/>`; }
+  const pts=h.filter(p=>p[key]!=null);
+  g+=`<path d="${pts.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p[key])).join("")}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+  const ult=pts[pts.length-1];
+  if(pts.length<=40) pts.forEach(p=>g+=`<circle cx="${x(p.dias)}" cy="${y(p[key])}" r="3" fill="var(--accent)"/>`);
+  g+=`<circle cx="${x(ult.dias)}" cy="${y(ult[key])}" r="6" fill="var(--secondary)" stroke="var(--primary)" stroke-width="2.5"/>`;
+  g+=`<line class="cross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" opacity="0"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Curva de consumo diário da baia ${esc(r.curral)}">${g}</svg><div class="tip"></div>`;
+  if(legEl) legEl.innerHTML=`<span><i class="line" style="background:var(--accent)"></i>${key==="pv"?"%PV":"kg MS/cab"}</span>`+
+    `<span><i style="background:var(--secondary);border:2px solid var(--primary);width:9px;height:9px"></i>hoje</span>`+
+    (espPts.length?`<span><i class="dash"></i>curva esperada</span>`:"")+
+    (tr.length?`<span><i class="line" style="background:#a9ad00"></i>troca de dieta</span>`:"")+
+    (pts.length<3?`<span>· o histórico cresce a cada relatório</span>`:"");
+  if(noteEl) noteEl.innerHTML = tr.length ? tr.map(t=>`Troca em ${fmtD(t.p.dt)} (dia ${t.p.dias}): ${esc(t.de)} → <b>${esc(t.para)}</b>`).join("<br>") : "";
+  const hit=box.querySelector(".hit"), tip=box.querySelector(".tip"), cross=box.querySelector(".cross"), svg=box.querySelector("svg");
+  const mover=ev=>{
+    const b=svg.getBoundingClientRect(), sx=(ev.clientX-b.left)*W/b.width;
+    const d=Math.round(dmin+(sx-m.l)/(W-m.l-m.r)*(dmax-dmin));
+    let p=pts.reduce((best,q)=>Math.abs(q.dias-d)<Math.abs(best.dias-d)?q:best, pts[0]);
+    cross.setAttribute("x1",x(p.dias)); cross.setAttribute("x2",x(p.dias)); cross.setAttribute("opacity",.45);
+    tip.innerHTML=`${fmtD(p.dt)} · dia ${p.dias}<br><b>${fmt(p[key])}${key==="pv"?"% PV":" kg MS"}</b>${p.mn!=null&&key==="ms"?` · ${fmt(p.mn)} MN`:""}<br>${esc(p.racao)}`;
+    tip.style.left=Math.min(Math.max(x(p.dias)*b.width/W,70),b.width-70)+"px"; tip.style.top=(y(p[key])*b.height/H)+"px"; tip.style.opacity=1;
+  };
+  hit.addEventListener("pointermove",mover); hit.addEventListener("pointerdown",mover);
+  hit.addEventListener("pointerleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
+}
+
+/* =====================================================================
+   VISTORIA – uma baia por vez, troca com arrastar o dedo ou setas
+   ===================================================================== */
+const V = { curral:null, soAlerta:false, modo:"ms", dir:"" };
+function vistoriaLista(){ let R=[...S.rows].sort(ordCurral); if(V.soAlerta) R=R.filter(r=>r.sev!=="ok"); return R; }
+function renderVistoria(){
+  const el=$("#tab-vistoria"); if(!el || !S.rows) return;
+  const R=vistoriaLista();
+  if(!R.length){
+    el.innerHTML=`<div class="vt"><div class="card empty">Nenhuma baia ${V.soAlerta?"com alerta ":""}neste relatório.${V.soAlerta?" ✔":""}</div>
+      <div class="vt-foot"><label><input type="checkbox" id="vtSo" ${V.soAlerta?"checked":""}> Só baias com alerta</label></div></div>`;
+    $("#vtSo").onchange=e=>{ V.soAlerta=e.target.checked; renderVistoria(); }; return;
+  }
+  let i=R.findIndex(r=>r.curral===V.curral); if(i<0) i=0;
+  const r=R[i]; V.curral=r.curral;
+  const cfg=getConfig(S.farm), L=limitesDe(cfg,r.racao);
+  const info=cfg.catInfo&&cfg.catInfo[r.ct];
+  const nO=nivel(r.dOntem,L.ontem), n5=nivel(r.d5,L.cinco);
+  const ord=[...r.checks].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
+  el.innerHTML=`<div class="vt">
+    <div class="vt-nav">
+      <button class="vt-arrow" id="vtPrev" aria-label="Baia anterior" ${i===0?"disabled":""}>‹</button>
+      <button class="vt-pick" id="vtPick" aria-label="Buscar outra baia"><b>${esc(r.curral)}</b><small>${i+1} de ${R.length} · toque para buscar 🔍</small></button>
+      <button class="vt-arrow" id="vtNext" aria-label="Próxima baia" ${i===R.length-1?"disabled":""}>›</button>
+    </div>
+    <div class="vt-prog"><i style="width:${(i+1)/R.length*100}%"></i></div>
+    <div class="vt-card ${V.dir}" id="vtCard">
+      <div class="vt-head">
+        <div><b>Lote ${esc(r.lote)} · ${r.cab} cab</b><small>${esc(r.ct)}${r.sexo?" · "+r.sexo:""}${info?" · "+esc(info):""} · entrada ${fmt(r.peso_entrada,0)} kg</small></div>
+        <span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span>
+      </div>
+      <section class="vt-sec">
+        <div class="vt-sec-h"><h3>Curva de consumo</h3><div class="seg" id="vtSeg"><button data-m="ms" class="${V.modo==="ms"?"on":""}">kg MS</button><button data-m="pv" class="${V.modo==="pv"?"on":""}">%PV</button></div></div>
+        <div class="chart" id="vtChart"></div><div class="legend" id="vtLeg"></div><div class="note" id="vtNote"></div>
+      </section>
+      <section class="vt-sec">
+        <h3>Consumo do dia <small style="text-transform:none;letter-spacing:0;font-weight:400">kg/cab</small></h3>
+        <div class="tiles t3">
+          <div class="tile"><span>MN</span><b>${fmt(r.cons_dia_mn)}</b><small>matéria natural</small></div>
+          <div class="tile dest"><span>MS</span><b>${fmt(r.cons_dia_ms)}</b><small>matéria seca</small></div>
+          <div class="tile"><span>% PV</span><b>${fmt(r.cons_dia_pv)}</b><small>${r.pvEsp!=null?"esperado "+fmt(r.pvEsp):"sem curva"}</small></div>
+        </div>
+      </section>
+      <section class="vt-sec">
+        <h3>Comparação do consumo (MS)</h3>
+        <div class="tiles t2">
+          <div class="tile cmp ${nO}"><span>vs ontem</span><b>${seta(r.dOntem)}${pct(r.dOntem)}</b><small>ontem ${fmt(r.ms_1d)} kg · limite ±${L.ontem}%</small></div>
+          <div class="tile cmp ${n5}"><span>vs média 5 dias</span><b>${seta(r.d5)}${pct(r.d5)}</b><small>média ${fmt(r.ms_5d)} kg · limite ±${L.cinco}%</small></div>
+        </div>
+      </section>
+      <section class="vt-sec">
+        <div class="tiles t2">
+          <div class="tile"><span>Dias de cocho</span><b>${r.dias_conf}</b><small>entrada ${esc(r.dt_entrada||"–")}${r.dt_abate?" · abate "+esc(r.dt_abate):""}</small></div>
+          <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
+        </div>
+      </section>
+      <section class="vt-sec">
+        <h3>Leitura de cocho</h3>
+        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+      </section>
+      <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
+        <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
+    </div>
+    <div class="vt-foot"><label><input type="checkbox" id="vtSo" ${V.soAlerta?"checked":""}> Só baias com alerta</label><span>arraste para os lados ↔</span></div>
+  </div>`;
+  V.dir="";
+  const ir=d=>{ const n=i+d; if(n<0||n>=R.length) return; V.curral=R[n].curral; V.dir=d>0?"anim-l":"anim-r"; renderVistoria(); window.scrollTo({top:0,behavior:"instant"}); };
+  $("#vtPrev").onclick=()=>ir(-1); $("#vtNext").onclick=()=>ir(1);
+  $("#vtPick").onclick=abrirSeletor;
+  $("#vtSo").onchange=e=>{ V.soAlerta=e.target.checked; renderVistoria(); };
+  document.querySelectorAll("#vtSeg button").forEach(b=>b.onclick=()=>{ V.modo=b.dataset.m; renderVistoria(); });
+  // arrastar o dedo (fora do gráfico, que tem o próprio toque)
+  const card=$("#vtCard"); let t0=null;
+  card.addEventListener("touchstart",e=>{ if(e.target.closest(".chart,.seg,summary")) { t0=null; return; } const t=e.touches[0]; t0={x:t.clientX,y:t.clientY,ts:Date.now()}; },{passive:true});
+  card.addEventListener("touchend",e=>{ if(!t0) return; const t=e.changedTouches[0], dx=t.clientX-t0.x, dy=t.clientY-t0.y;
+    if(Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.4 && Date.now()-t0.ts<800) ir(dx<0?1:-1); t0=null; },{passive:true});
+  vistoriaIr = ir;
+  requestAnimationFrame(()=>desenharCurva($("#vtChart"),$("#vtLeg"),$("#vtNote"),r,V.modo,190));
+}
+let vistoriaIr = null;
+document.addEventListener("keydown",e=>{
+  if(S.tab!=="vistoria" || !$("#modal").classList.contains("hidden") || /input|select|textarea/i.test(e.target.tagName)) return;
+  if(e.key==="ArrowRight" && vistoriaIr) vistoriaIr(1);
+  if(e.key==="ArrowLeft" && vistoriaIr) vistoriaIr(-1);
+});
+function abrirSeletor(){
+  const R=vistoriaLista();
+  $("#sheet").innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <h2>Ir para a baia</h2><button class="btn ghost small" id="closeM">Fechar</button></div>
+    <input type="search" id="pkBusca" placeholder="Digite o curral (ex.: A-12)" autocomplete="off" style="margin-top:10px">
+    <div class="pk-grid" id="pkGrid"></div>
+    <p class="note">Ponto vermelho = alerta alto · amarelo = atenção.</p>`;
+  const desenhar=()=>{
+    const q=$("#pkBusca").value.trim().toLowerCase().replace(/\s+/g,"");
+    const lista=R.filter(r=>!q || String(r.curral).toLowerCase().replace(/\s+/g,"").includes(q));
+    $("#pkGrid").innerHTML=lista.map(r=>`<button data-c="${esc(r.curral)}" class="${r.curral===V.curral?"atual":""}">${esc(r.curral)}${r.sev!=="ok"?`<i class="${r.sev}"></i>`:""}</button>`).join("") || `<div class="empty">Nenhum curral encontrado.</div>`;
+    $("#pkGrid").querySelectorAll("button").forEach(b=>b.onclick=()=>{ V.curral=b.dataset.c; V.dir=""; closeModal(); renderVistoria(); });
+    return lista;
+  };
+  desenhar();
+  $("#pkBusca").addEventListener("input",desenhar);
+  $("#pkBusca").addEventListener("keydown",e=>{ if(e.key==="Enter"){ const l=desenhar(); if(l.length){ V.curral=l[0].curral; closeModal(); renderVistoria(); } } });
+  $("#closeM").onclick=closeModal;
+  $("#modal").classList.remove("hidden");
+  if(matchMedia("(min-width:700px)").matches) $("#pkBusca").focus();
+}
+
+/* =====================================================================
+   ANÁLISE – visão geral para o computador
+   ===================================================================== */
+function anRows(){
+  const sx=$("#aSexo").value, d=$("#aDieta").value, st=$("#aStatus").value, q=$("#aBusca").value.trim().toLowerCase();
+  return S.rows.filter(r=>(!sx||r.sexo===sx)&&(!d||r.racao===d)&&(!q||String(r.curral).toLowerCase().includes(q))&&
+    (!st || (st==="alerta"&&r.sev!=="ok") || (st==="alto"&&r.sev==="alto") || (st==="ok"&&r.sev==="ok")));
+}
+["#aSexo","#aDieta","#aStatus","#aBusca"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,()=>renderAnalise())));
+function renderAnalise(){
+  if(!S.rows) return;
+  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort(), cur=$("#aDieta").value;
+  $("#aDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
+  const R=anRows();
+  $("#aResumo").textContent = R.length===S.rows.length ? "" : `${R.length} de ${S.rows.length} baias`;
+  renderKpis(R); renderAlertas(R); renderScatter(R); renderHeat(R); renderCmp(R); renderDietas(R); renderTabela(R);
+}
+function media(R,k){ const cab=R.reduce((s,r)=>s+(r[k]!=null?r.cab:0),0); return cab? R.reduce((s,r)=>s+(r[k]!=null?r[k]*r.cab:0),0)/cab : null; }
+function renderKpis(R){
+  if(!R.length){ $("#anKpis").innerHTML=`<div class="card empty">Nenhuma baia com esses filtros.</div>`; return; }
+  const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), ms1=media(R,"ms_1d"), ms5=media(R,"ms_5d");
+  const pv=media(R,"cons_dia_pv"), esp=media(R.filter(r=>r.pvEsp!=null),"pvEsp");
+  const nA=R.filter(r=>r.sev==="alto").length, nM=R.filter(r=>r.sev==="medio").length;
+  const dias=media(R,"dias_conf");
+  $("#anKpis").innerHTML=`
+    <div class="kpi"><div class="l">Baias · cabeças</div><div class="v">${R.length} · ${cab.toLocaleString("pt-BR")}</div><div class="s">${fmt(dias,0)} dias de cocho em média</div></div>
+    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(ms)}</div><div class="s"><span class="${(ms-ms1)<0?"down":"up"}">${pct((ms-ms1)/ms1*100)}</span> × ontem · <span class="${(ms-ms5)<0?"down":"up"}">${pct((ms-ms5)/ms5*100)}</span> × 5 dias</div></div>
+    <div class="kpi"><div class="l">MN média (kg/cab)</div><div class="v">${fmt(media(R,"cons_dia_mn"))}</div><div class="s">matéria natural</div></div>
+    <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(pv)}%</div><div class="s">${esp!=null?"esperado "+fmt(esp)+"% ("+pp(pv-esp)+")":"sem curva cadastrada"}</div></div>
+    <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nA+nM}</div><div class="s"><span class="chip alto">${nA} alto</span> <span class="chip medio">${nM} atenção</span></div></div>`;
+}
+function renderAlertas(R){
+  const list=R.filter(r=>r.alertas.length).sort((a,b)=>SEV[b.sev]-SEV[a.sev]||b.alertas.length-a.alertas.length||ordCurral(a,b));
+  $("#anAlerts").innerHTML = list.length ? list.map(r=>{
     const top=[...r.alertas].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
     return `<div class="alert ${r.sev}" data-cur="${esc(r.curral)}" role="button" tabindex="0">
       <div class="cur">${esc(r.curral)}</div>
       <div class="msg">${esc(top[0].titulo)}<small>${top.map(c=>esc(c.curto||c.titulo)).join(" · ")} · ${r.cab} cab · ${r.dias_conf} dias</small></div></div>`;
-  }).join("") : `<div class="empty">Nenhum alerta para este dia. ✔</div>`;
-  document.querySelectorAll(".alert").forEach(el=>el.onclick=()=>openBaia(el.dataset.cur));
-  renderChart();
+  }).join("") : `<div class="empty">Nenhum alerta com esses filtros. ✔</div>`;
+  $("#anAlerts").querySelectorAll(".alert").forEach(el=>{ el.onclick=()=>openBaia(el.dataset.cur); el.onkeydown=e=>{ if(e.key==="Enter") openBaia(el.dataset.cur); }; });
 }
-
-["#pSexo","#pDieta"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,renderPainel)));
-function renderChart(){
-  const R=painelRows(), cfg=getConfig(S.farm);
-  const fs=[$("#pSexo").value,$("#pDieta").value].filter(Boolean);
-  $("#chartFiltro").textContent = fs.length ? "· "+fs.join(" · ")+" ("+R.length+" baias)" : "· todas as baias ("+R.length+")";
-  const W=Math.max(340,Math.min(1000,($('#chart').clientWidth||760))),H=W<600?260:300,m={l:40,r:12,t:14,b:36};
+function renderScatter(R){
+  const box=$("#anScatter"); if(!box) return;
+  if(!R.length){ box.innerHTML=""; $("#anScatterLeg").innerHTML=""; return; }
+  const cfg=getConfig(S.farm);
+  const W=Math.max(320,box.clientWidth||600), H=W<560?250:290, m={l:40,r:12,t:12,b:34};
   const maxD=Math.max(...R.map(r=>r.dias_conf))+10, minD=0;
-  const pvs=R.map(r=>r.cons_dia_pv).concat(R.map(r=>r.pvEsp||0).filter(Boolean));
+  const pvs=R.map(r=>r.cons_dia_pv).concat(R.map(r=>r.pvEsp).filter(v=>v!=null));
   const lo=Math.floor((Math.min(...pvs)-0.2)*5)/5, hi=Math.ceil((Math.max(...pvs)+0.2)*5)/5;
   const x=d=>m.l+(d-minD)/(maxD-minD)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
   let g="";
-  for(let v=lo; v<=hi+1e-9; v+=0.2){ g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
-  const step = (maxD>150?30:maxD>60?15:10)*(W<600?2:1);
-  for(let d=0; d<=maxD; d+=step){ g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`; }
-  g+=`<text x="${(W+m.l)/2}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">dias de confinamento</text>`;
-  // curva(s) esperada(s) — macho tracejado escuro, fêmea tracejado claro
+  const passoY=(hi-lo)>1.6?0.4:0.2;
+  for(let v=lo; v<=hi+1e-9; v+=passoY){ g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+  const step=(maxD>150?30:maxD>60?15:10)*(W<560?2:1);
+  for(let d=0; d<=maxD; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
+  g+=`<text x="${W-m.r}" y="${H-3}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
   const sexos=[...new Set(R.map(r=>r.sexo).filter(Boolean))];
   sexos.forEach((sx,i)=>{
     const fx=cfg.curva.filter(c=>c.sexo===sx).sort((a,b)=>a.diaIni-b.diaIni);
@@ -648,176 +951,179 @@ function renderChart(){
   });
   R.forEach(r=>{
     const col = r.sev==="alto"?"var(--crit)":r.sev==="medio"?"var(--warn)":"var(--accent)";
-    g+=`<circle cx="${x(r.dias_conf)}" cy="${y(r.cons_dia_pv)}" r="5" fill="${col}" stroke="var(--card)" stroke-width="2" data-cur="${esc(r.curral)}" style="cursor:pointer"/>`;
+    g+=`<circle cx="${x(r.dias_conf)}" cy="${y(r.cons_dia_pv)}" r="6" fill="${col}" stroke="var(--card)" stroke-width="2" data-cur="${esc(r.curral)}" style="cursor:pointer"/>`;
   });
-  $("#chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="IMS %PV de cada baia por dias de confinamento, com a curva esperada">${g}</svg><div class="tip" id="tip"></div>`;
-  $("#chartLegend").innerHTML = `<span><i style="background:var(--accent)"></i>baia sem alerta</span><span><i style="background:var(--warn)"></i>alerta médio</span><span><i style="background:var(--crit)"></i>alerta alto</span>`+
-    sexos.map((s,i)=>`<span><i class="line" style="background:${i?"var(--muted)":"var(--ink2)"}"></i>curva esperada – ${s.toLowerCase()}</span>`).join("");
-  const tip=$("#tip");
-  $("#chart").querySelectorAll("circle").forEach(c=>{
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="IMS %PV de cada baia por dias de cocho">${g}</svg><div class="tip"></div>`;
+  $("#anScatterLeg").innerHTML=`<span><i style="background:var(--accent)"></i>sem alerta</span><span><i style="background:var(--warn)"></i>atenção</span><span><i style="background:var(--crit)"></i>alerta alto</span>`+
+    sexos.map((s,i)=>`<span><i class="dash" style="${i?"border-top-style:dotted;border-color:var(--muted)":""}"></i>curva – ${s.toLowerCase()}</span>`).join("");
+  const tip=box.querySelector(".tip");
+  box.querySelectorAll("circle").forEach(c=>{
     const r=R.find(o=>o.curral===c.dataset.cur);
-    c.onmouseenter=()=>{ const b=$("#chart").getBoundingClientRect(), cb=c.getBoundingClientRect();
-      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias · ${fmt(r.cons_dia_pv)}% PV${r.pvEsp?` (esp. ${fmt(r.pvEsp)}%)`:""}`;
+    const show=()=>{ const b=box.getBoundingClientRect(), cb=c.getBoundingClientRect();
+      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias<br>${fmt(r.cons_dia_pv)}% PV${r.pvEsp!=null?` · esp. ${fmt(r.pvEsp)}%`:""}<br>${fmt(r.cons_dia_ms)} kg MS · ${pct(r.dOntem)} × ontem`;
       tip.style.left=(cb.left-b.left+cb.width/2)+"px"; tip.style.top=(cb.top-b.top)+"px"; tip.style.opacity=1; };
-    c.onmouseleave=()=>tip.style.opacity=0;
-    c.onclick=()=>openBaia(r.curral);
+    c.onmouseenter=show; c.onmouseleave=()=>tip.style.opacity=0; c.onclick=()=>openBaia(r.curral);
   });
 }
-
-/* ---------- tabela de baias ---------- */
-function renderFiltros(){
-  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort();
-  const cur=$("#fDieta").value;
-  $("#fDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
+/* mapa de calor: desvio do consumo de MS do dia em relação à média de 5 dias, por relatório */
+function corHeat(v){
+  if(v==null||isNaN(v)) return null;
+  const t=Math.max(-1,Math.min(1,v/12)), a=Math.abs(t);
+  const neutro=escuro()?[38,50,74]:[238,241,245], neg=escuro()?[230,103,103]:[204,51,51], pos=escuro()?[143,179,236]:[2,53,119];
+  const alvo=t<0?neg:pos, k=a<0.12?0:Math.pow(a,0.8);
+  return `rgb(${neutro.map((n,i)=>Math.round(n+(alvo[i]-n)*k)).join(",")})`;
 }
-["#fBusca","#fDieta","#fStatus"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,renderTabela)));
+function renderHeat(R){
+  const box=$("#anHeat"); if(!box) return;
+  const datas=datasAte(S.farm,S.data).slice(-14);
+  if(!R.length){ box.innerHTML=""; return; }
+  if(datas.length<2){ box.innerHTML=`<div class="empty">O mapa aparece a partir do 2º relatório. Hoje há ${datas.length}.</div>`; return; }
+  const rel=DATA[S.farm].relatorios;
+  const linhas=[...R].sort(ordCurral).map(r=>{
+    const cel=datas.map(d=>{ const x=acharBaia(rel[d],r); if(!x||!x.ms_5d) return `<td class="vazio" title="sem dado em ${d}"></td>`;
+      const v=(x.cons_dia_ms-x.ms_5d)/x.ms_5d*100;
+      return `<td style="background:${corHeat(v)}" title="${esc(r.curral)} · ${d}: ${fmt(x.cons_dia_ms)} kg MS (${pct(v)} × média 5 dias)" data-cur="${esc(r.curral)}" data-d="${d}"></td>`; }).join("");
+    return `<tr><td class="lbl">${esc(r.curral)}</td>${cel}</tr>`;
+  }).join("");
+  box.innerHTML=`<table><thead><tr><th></th>${datas.map(d=>`<th>${d.slice(0,5)}</th>`).join("")}</tr></thead><tbody>${linhas}</tbody></table>
+    <div class="heat-leg"><span>−12% ou menos</span><span class="bar" style="background:linear-gradient(90deg,${corHeat(-12)},${corHeat(-6)},${corHeat(0)},${corHeat(6)},${corHeat(12)})"></span><span>+12% ou mais</span><span style="margin-left:8px">▨ sem dado</span></div>`;
+  box.querySelectorAll("td[data-cur]").forEach(td=>td.onclick=()=>{ if(td.dataset.d!==S.data){ S.data=td.dataset.d; $("#dateSel").value=S.data; refresh(); } openBaia(td.dataset.cur); });
+}
+/* comparar curvas de várias baias */
+const CMP = { sel:null, farm:null };
+const CORES=["--s1","--s2","--s3","--s4","--s5","--s6"];
+function renderCmp(R){
+  const box=$("#anCmp"); if(!box) return;
+  const todos=[...S.rows].sort(ordCurral);
+  if(!CMP.sel || CMP.farm!==S.farm){
+    const alerta=[...S.rows].filter(r=>r.sev==="alto").sort(ordCurral).slice(0,2).map(r=>r.curral);
+    CMP.sel = (alerta.length?alerta:[]).concat(todos.filter(r=>!alerta.includes(r.curral)).slice(0,3-alerta.length).map(r=>r.curral));
+    CMP.farm=S.farm;
+  }
+  CMP.sel=CMP.sel.filter(c=>todos.some(r=>r.curral===c));
+  const sel=$("#anCmpSel");
+  sel.innerHTML=CMP.sel.map((c,i)=>`<button class="on" data-c="${esc(c)}" style="background:var(${CORES[i]})" title="remover">${esc(c)} ✕</button>`).join("")+
+    (CMP.sel.length<6?`<input type="search" list="anCmpList" id="anCmpAdd" placeholder="+ adicionar curral"><datalist id="anCmpList">${todos.filter(r=>!CMP.sel.includes(r.curral)).map(r=>`<option value="${esc(r.curral)}">`).join("")}</datalist>`:"");
+  sel.querySelectorAll("button").forEach(b=>b.onclick=()=>{ CMP.sel=CMP.sel.filter(c=>c!==b.dataset.c); renderCmp(R); });
+  const add=$("#anCmpAdd");
+  if(add){ const f=()=>{ const v=add.value.trim(); const r=todos.find(o=>String(o.curral).toLowerCase()===v.toLowerCase()); if(r&&!CMP.sel.includes(r.curral)&&CMP.sel.length<6){ CMP.sel.push(r.curral); renderCmp(R);} };
+    add.addEventListener("change",f); add.addEventListener("keydown",e=>{ if(e.key==="Enter") f(); }); }
+  const series=CMP.sel.map((c,i)=>{ const r=todos.find(o=>o.curral===c); return {c, cor:`var(${CORES[i]})`, h:historico(S.farm,r).filter(p=>p.ms!=null)}; }).filter(s=>s.h.length);
+  if(!series.length){ box.innerHTML=`<div class="empty">Escolha baias para comparar.</div>`; $("#anCmpLeg").innerHTML=""; return; }
+  const W=Math.max(320,box.clientWidth||560), H=260, m={l:38,r:56,t:12,b:30};
+  const all=series.flatMap(s=>s.h);
+  const dmin=Math.min(...all.map(p=>p.dias)), dmax=Math.max(dmin+1,...all.map(p=>p.dias));
+  let lo=Math.min(...all.map(p=>p.ms)), hi=Math.max(...all.map(p=>p.ms)), pad=(hi-lo)*0.12||1; lo=Math.max(0,lo-pad); hi+=pad;
+  const x=d=>m.l+(d-dmin)/(dmax-dmin)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  let g="";
+  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+  const span=dmax-dmin, step=span<=12?2:span<=30?5:span<=80?10:20;
+  for(let d=Math.ceil(dmin/step)*step; d<=dmax; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+15}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
+  g+=`<text x="${W-m.r}" y="${H-2}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
+  const fim=[];
+  series.forEach(s=>{
+    g+=`<path d="${s.h.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p.ms)).join("")}" fill="none" stroke="${s.cor}" stroke-width="2.2" stroke-linejoin="round"/>`;
+    const u=s.h[s.h.length-1]; g+=`<circle cx="${x(u.dias)}" cy="${y(u.ms)}" r="3.5" fill="${s.cor}"/>`; fim.push({s,y:y(u.ms),x:x(u.dias)});
+  });
+  if(series.length<=4){ fim.sort((a,b)=>a.y-b.y); for(let i=1;i<fim.length;i++) if(fim[i].y-fim[i-1].y<13) fim[i].y=fim[i-1].y+13;
+    fim.forEach(f=>g+=`<text x="${f.x+7}" y="${f.y+4}" font-size="11" font-weight="700" fill="var(--ink)">${esc(f.s.c)}</text>`); }
+  g+=`<line class="cross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" opacity="0"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Comparação das curvas de consumo de MS">${g}</svg><div class="tip"></div>`;
+  $("#anCmpLeg").innerHTML=series.map(s=>`<span><i class="line" style="background:${s.cor}"></i>${esc(s.c)}</span>`).join("");
+  const hit=box.querySelector(".hit"), tip=box.querySelector(".tip"), cross=box.querySelector(".cross"), svg=box.querySelector("svg");
+  const mover=ev=>{ const b=svg.getBoundingClientRect(), sx=(ev.clientX-b.left)*W/b.width, d=Math.round(dmin+(sx-m.l)/(W-m.l-m.r)*(dmax-dmin));
+    const linhas=series.map(s=>{ const p=s.h.find(q=>q.dias===d); return p?`<span style="color:inherit">■</span> ${esc(s.c)}: <b>${fmt(p.ms)}</b>`:null; }).filter(Boolean);
+    if(!linhas.length){ tip.style.opacity=0; return; }
+    cross.setAttribute("x1",x(d)); cross.setAttribute("x2",x(d)); cross.setAttribute("opacity",.45);
+    tip.innerHTML=`dia ${d} · kg MS/cab<br>`+linhas.join("<br>");
+    tip.style.left=Math.min(Math.max(x(d)*b.width/W,80),b.width-80)+"px"; tip.style.top=(m.t+40)*b.height/H+"px"; tip.style.opacity=1; };
+  hit.addEventListener("pointermove",mover); hit.addEventListener("pointerleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
+}
+function renderDietas(R){
+  const grupos={}; R.forEach(r=>(grupos[r.racao]=grupos[r.racao]||[]).push(r));
+  const linhas=Object.entries(grupos).map(([d,rs])=>{ const ms=media(rs,"cons_dia_ms"), ms1=media(rs,"ms_1d");
+    return {d, n:rs.length, cab:rs.reduce((s,r)=>s+r.cab,0), dias:media(rs,"dias_conf"), ms, mn:media(rs,"cons_dia_mn"), pv:media(rs,"cons_dia_pv"), dO:(ms-ms1)/ms1*100, al:rs.filter(r=>r.sev!=="ok").length}; })
+    .sort((a,b)=>b.cab-a.cab);
+  $("#anDietas").innerHTML=`<thead><tr><th class="l">Dieta</th><th>Baias</th><th>Cab</th><th>Dias</th><th>MN</th><th>MS</th><th>%PV</th><th>Δ ontem</th><th>Alertas</th></tr></thead><tbody>`+
+    linhas.map(l=>`<tr data-d="${esc(l.d)}"><td class="l"><b>${esc(l.d)}</b></td><td>${l.n}</td><td>${l.cab.toLocaleString("pt-BR")}</td><td>${fmt(l.dias,0)}</td><td>${fmt(l.mn)}</td><td>${fmt(l.ms)}</td><td>${fmt(l.pv)}</td>
+      <td class="${l.dO<0?"down":"up"}">${pct(l.dO)}</td><td>${l.al?`<span class="chip medio">${l.al}</span>`:"–"}</td></tr>`).join("")+`</tbody>`;
+  $("#anDietas").querySelectorAll("tbody tr").forEach(tr=>tr.onclick=()=>{ $("#aDieta").value=tr.dataset.d; renderAnalise(); });
+}
+/* tabela completa */
 const COLS=[
-  {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias"},{k:"racao",t:"Dieta",l:1},
-  {k:"cons_dia_ms",t:"MS hoje"},{k:"dOntem",t:"Δ ontem"},{k:"d5",t:"Δ 5d"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},{k:"cocho_d1",t:"Cocho D-1/D-2/D-3"}
+  {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias cocho"},{k:"racao",t:"Dieta",l:1},{k:"racao_dias",t:"Dias dieta"},
+  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem"},{k:"d5",t:"Δ 5d"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},
+  {k:"tend",t:"Últimos 10 dias",l:1,semOrdem:1},{k:"cocho_d1",t:"Cocho D-3/D-2/D-1"}
 ];
-function renderTabela(){
-  const q=$("#fBusca").value.trim().toLowerCase(), dieta=$("#fDieta").value, st=$("#fStatus").value;
-  let R=S.rows.filter(r=>(!q||r.curral.toLowerCase().includes(q))&&(!dieta||r.racao===dieta)&&
-    (!st|| (st==="alto"&&r.sev==="alto") || (st==="medio"&&r.sev!=="ok") || (st==="ok"&&r.sev==="ok")));
-  const {k,dir}=S.sort;
-  R.sort((a,b)=>{ let va=k==="sev"?SEV[a.sev]:a[k], vb=k==="sev"?SEV[b.sev]:b[k];
+function spark(r){
+  const h=historico(S.farm,r).filter(p=>p.ms!=null).slice(-10); if(h.length<2) return `<span style="color:var(--muted)">–</span>`;
+  const W=90,H=22, vs=h.map(p=>p.ms), lo=Math.min(...vs), hi=Math.max(...vs), rg=hi-lo||1;
+  const pts=h.map((p,i)=>`${(i/(h.length-1)*(W-6)+3).toFixed(1)},${(H-3-(p.ms-lo)/rg*(H-6)).toFixed(1)}`).join(" ");
+  const u=pts.split(" ").pop().split(",");
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-label="tendência de MS"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="1.6"/><circle cx="${u[0]}" cy="${u[1]}" r="2.6" fill="var(--secondary)" stroke="var(--primary)" stroke-width="1"/></svg>`;
+}
+function renderTabela(R){
+  const {k,dir}=S.sort; R=[...R];
+  R.sort((a,b)=>{ if(k==="curral") return ordCurral(a,b)*dir; let va=k==="sev"?SEV[a.sev]:a[k], vb=k==="sev"?SEV[b.sev]:b[k];
     if(va==null) return 1; if(vb==null) return -1;
     return (typeof va==="string"? va.localeCompare(vb,"pt-BR",{numeric:true}) : va-vb)*dir; });
   const cls=v=>v==null?"":v<0?"down":v>0?"up":"";
-  const lbl={ok:"OK",medio:"Atenção",alto:"Alerta"};
-  $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${c.k}">${c.t}${k===c.k?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
-    R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${lbl[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
-      <td>${r.cab}</td><td>${r.dias_conf}</td><td class="l">${esc(r.racao)}</td><td>${fmt(r.cons_dia_ms)}</td>
+  $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${c.k}" ${c.semOrdem?'style="cursor:default"':""}>${c.t}${k===c.k?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
+    R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
+      <td>${r.cab}</td><td>${r.dias_conf}</td><td class="l">${esc(r.racao)}</td><td>${r.racao_dias??"–"}</td><td>${fmt(r.cons_dia_mn)}</td><td><b>${fmt(r.cons_dia_ms)}</b></td>
       <td class="${cls(r.dOntem)}">${pct(r.dOntem)}</td><td class="${cls(r.d5)}">${pct(r.d5)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
-      <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td>${fmt(r.cocho_d1,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d3,1)}</td></tr>`).join("")+
+      <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
     (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
-  $("#tbl").querySelectorAll("th").forEach(th=>th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(); });
+  $("#tbl").querySelectorAll("th").forEach(th=>{ const c=COLS.find(c=>c.k===th.dataset.k); if(c.semOrdem) return;
+    th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(anRows()); }; });
   $("#tbl").querySelectorAll("tbody tr[data-cur]").forEach(tr=>tr.onclick=()=>openBaia(tr.dataset.cur));
 }
+$("#btnCsv").onclick=()=>{
+  const R=[...anRows()].sort(ordCurral);
+  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média 5d","Var. ontem %","Var. 5d %","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
+  const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
+  const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
+  const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ const s=String(v); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download=`mr-report_${S.farm}_${S.data.split("/").reverse().join("-")}.csv`; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
+};
 
-/* ---------- detalhe da baia ---------- */
+/* ---------- detalhe da baia (Análise) ---------- */
 function openBaia(cur){
   const r=S.rows.find(o=>o.curral===cur); if(!r) return;
   const mini=(l,v)=>`<div class="mini"><div class="l">${l}</div><div class="v">${v}</div></div>`;
-  const ico={ok:"✓",medio:"!",alto:"!"};
   const ord=[...r.checks].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
+  const info=getConfig(S.farm).catInfo[r.ct];
   $("#sheet").innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-      <div><h2>Curral ${esc(r.curral)}</h2><div style="color:var(--ink2);font-size:13px">Lote ${r.lote} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(getConfig(S.farm).catInfo[r.ct]?", "+esc(getConfig(S.farm).catInfo[r.ct]):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate)}</div></div>
-      <button class="btn ghost small" id="closeM">Fechar</button>
+      <div><h2>Curral ${esc(r.curral)} <span class="chip ${r.sev}" style="vertical-align:3px">${LBL[r.sev]}</span></h2>
+      <div style="color:var(--ink2);font-size:13px">Lote ${r.lote} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(info?", "+esc(info):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate||"–")}</div></div>
+      <div style="display:flex;gap:6px"><button class="btn small lime" id="irVist">Ver na vistoria</button><button class="btn ghost small" id="closeM">Fechar</button></div>
     </div>
-    <h3>Consumo de MS (kg/cab)</h3>
-    <div class="grid2">${mini("Hoje",fmt(r.cons_dia_ms))}${mini("Ontem (D-1)",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("Média 5 dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Média desde a entrada",fmt(r.ms_med))}</div>
-    <h3>IMS (%PV)</h3>
-    <div class="grid2">${mini("Hoje",fmt(r.cons_dia_pv)+"%")}${mini("Esperado (curva)",r.pvEsp==null?"–":fmt(r.pvEsp)+"% <small>"+pp(r.dCurva)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta",esc(r.racao)+" <small>("+r.racao_dias+" d)</small>")}</div>
-    <h3>Curva de consumo da baia</h3>
-    <div class="seg" id="segM"><button data-m="ms" class="on">kg MS/cab</button><button data-m="pv">%PV</button></div>
-    <div class="chart" id="bChart"></div>
-    <div class="legend" id="bLegend"></div>
-    <div class="note" id="bNote"></div>
-    <h3>Leitura de cocho</h3>
-    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>D-1 (ontem)</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
-    <h3>Verificações</h3>
-    <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${ico[c.sev]}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
+    <h3 style="margin-top:14px">Consumo do dia (kg/cab)</h3>
+    <div class="grid2" style="grid-template-columns:repeat(3,1fr)">${mini("MN",fmt(r.cons_dia_mn))}${mini("MS",fmt(r.cons_dia_ms))}${mini("%PV",fmt(r.cons_dia_pv)+(r.pvEsp!=null?` <small>esp. ${fmt(r.pvEsp)}</small>`:""))}</div>
+    <div class="grid2" style="margin-top:8px">${mini("MS ontem",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("MS média 5 dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta atual",esc(r.racao)+" <small>("+(r.racao_dias??"–")+" dias)</small>")}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><h3 style="margin:0">Curva de consumo</h3><div class="seg" id="segM"><button data-m="ms" class="on">kg MS</button><button data-m="pv">%PV</button></div></div>
+    <div class="chart" id="bChart"></div><div class="legend" id="bLegend"></div><div class="note" id="bNote"></div>
+    <h3 style="margin-top:14px">Leitura de cocho</h3>
+    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+    <h3 style="margin-top:14px">Verificações</h3>
+    <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
   $("#modal").classList.remove("hidden");
   $("#closeM").onclick=closeModal;
+  $("#irVist").onclick=()=>{ V.curral=r.curral; closeModal(); setTab("vistoria"); };
   let modo="ms";
-  const draw=()=>renderBaiaChart(r,modo);
+  const draw=()=>desenharCurva($("#bChart"),$("#bLegend"),$("#bNote"),r,modo,220);
   document.querySelectorAll("#segM button").forEach(b=>b.onclick=()=>{ modo=b.dataset.m; document.querySelectorAll("#segM button").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
   requestAnimationFrame(draw);
 }
 function closeModal(){ $("#modal").classList.add("hidden"); }
 $("#modal").addEventListener("click",e=>{ if(e.target.id==="modal") closeModal(); });
-let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.user&&S.tab==="painel") renderChart(); },150); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(!S.user||!S.rows) return;
+  if(S.tab==="analise"){ const R=anRows(); renderScatter(R); renderCmp(R); }
+  if(S.tab==="vistoria") renderVistoria(); },180); });
 
-/* ---------- histórico por baia ---------- */
-const parseD=s=>{const [d,m,y]=s.split("/").map(Number);return new Date(y<100?2000+y:y,m-1,d);};
-const addDays=(dt,n)=>{const x=new Date(dt);x.setDate(x.getDate()+n);return x;};
-const fmtD=dt=>dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
-const SIMULAR=false; // histórico vem só dos relatórios reais
-
-function historico(farmId, r){
-  const rel=DATA[farmId].relatorios, pts={};
-  Object.keys(rel).sort((a,b)=>dateKey(a).localeCompare(dateKey(b))).forEach(d=>{
-    const x=rel[d].find(o=>o.lote===r.lote && o.curral===r.curral) || rel[d].find(o=>o.lote===r.lote);
-    if(!x) return;
-    const dt=parseD(d);
-    pts[dt.getTime()]={dt,dias:x.dias_conf,ms:x.cons_dia_ms,pv:x.cons_dia_pv,racao:x.racao,peso:x.peso_atual_prj,src:"rel"};
-    const on=addDays(dt,-1);
-    if(!pts[on.getTime()]) pts[on.getTime()]={dt:on,dias:x.dias_conf-1,ms:x.ms_1d,pv:x.ims_pv_1d,racao:x.racao,src:"rel"};
-  });
-  let arr=Object.values(pts).sort((a,b)=>a.dt-b.dt);
-  if(SIMULAR && arr.length && arr[0].dias>1){
-    // dias anteriores simulados, coerentes com o consumo atual, a média de 5 dias e a data de início da ração atual
-    const f=arr[0], tNow=f.dias, seedBase=r.lote;
-    let seed=seedBase; const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
-    const shape=t=>0.62+0.38*(1-Math.exp(-t/14));
-    const inicioRacao = tNow+1 - r.racao_dias; // dia de confinamento em que começou a ração atual
-    const sim=[];
-    for(let t=1;t<tNow;t++){
-      const peso=r.peso_entrada+(r.peso_atual_prj-r.peso_entrada)*(t/(r.dias_conf||tNow));
-      const pv=f.pv*shape(t)/shape(tNow)*(1+(rnd()-0.5)*0.05);
-      sim.push({dt:addDays(f.dt,t-tNow),dias:t,pv:+pv.toFixed(2),ms:+(pv*peso/100).toFixed(2),
-        racao: t<inicioRacao ? "Dieta anterior" : r.racao, src:"sim"});
-    }
-    arr=sim.concat(arr);
-  }
-  return arr;
-}
-function trocasDeDieta(h){
-  const out=[]; for(let i=1;i<h.length;i++) if(h[i].racao!==h[i-1].racao) out.push({i,de:h[i-1].racao,para:h[i].racao,p:h[i]});
-  return out;
-}
-function renderBaiaChart(r,modo){
-  const box=$("#bChart"); if(!box) return;
-  const h=historico(S.farm,r), cfg=getConfig(S.farm), tr=trocasDeDieta(h);
-  const key=modo==="pv"?"pv":"ms";
-  const W=Math.max(300,box.clientWidth||560),H=220,m={l:38,r:10,t:22,b:30};
-  const dmin=h[0].dias, dmax=h[h.length-1].dias;
-  let vals=h.map(p=>p[key]);
-  const espPts=[];
-  if(modo==="pv" && r.sexo){
-    for(let d=dmin; d<=dmax; d++){ const e=esperado(cfg,{...r,dias_conf:d}); if(e.pv!=null) espPts.push({d,v:e.pv}); }
-    vals=vals.concat(espPts.map(p=>p.v));
-  }
-  let lo=Math.min(...vals), hi=Math.max(...vals), pad=(hi-lo)*0.12||0.5; lo-=pad; hi+=pad;
-  const x=d=>m.l+(d-dmin)/Math.max(1,dmax-dmin)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
-  let g="";
-  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
-  const step=Math.max(5,Math.ceil((dmax-dmin)/6/5)*5);
-  for(let d=Math.ceil(dmin/step)*step; d<=dmax; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+15}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
-  g+=`<text x="${(W+m.l)/2}" y="${H-3}" text-anchor="middle" font-size="11" fill="var(--ink2)">dias de confinamento</text>`;
-  // trocas de dieta
-  tr.forEach(t=>{ const xx=x(t.p.dias)-0.5*(x(1)-x(0));
-    g+=`<line x1="${xx}" x2="${xx}" y1="${m.t-6}" y2="${H-m.b}" stroke="var(--serious)" stroke-width="1.5" stroke-dasharray="3 3"/>
-        <text x="${Math.min(xx+4,W-m.r-4)}" y="${m.t-8}" font-size="11" fill="var(--ink)" text-anchor="${xx>W-120?"end":"start"}">▼ troca de dieta · ${fmtD(t.p.dt)}</text>`; });
-  // curva esperada
-  if(espPts.length){ let p=""; espPts.forEach((q,i)=>p+=(i?"L":"M")+x(q.d)+","+y(q.v)); g+=`<path d="${p}" fill="none" stroke="var(--ink2)" stroke-width="1.5" stroke-dasharray="6 4"/>`; }
-  // consumo: simulado tracejado, real contínuo
-  const path=pts=>pts.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p[key])).join("");
-  const sim=h.filter(p=>p.src==="sim"), real=h.filter(p=>p.src==="rel");
-  if(sim.length) g+=`<path d="${path(sim.concat(real.slice(0,1)))}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 3" opacity=".7"/>`;
-  if(real.length) g+=`<path d="${path(real)}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
-  real.forEach(p=>g+=`<circle cx="${x(p.dias)}" cy="${y(p[key])}" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>`);
-  g+=`<line id="bCross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" opacity="0"/><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="bHit"/>`;
-  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Curva de consumo diário da baia">${g}</svg><div class="tip" id="bTip"></div>`;
-  $("#bLegend").innerHTML=`<span><i class="line" style="background:var(--accent)"></i>consumo dos relatórios</span>`+
-    (sim.length?`<span><i class="line" style="background:var(--accent);opacity:.5"></i>histórico simulado (protótipo)</span>`:"")+
-    (espPts.length?`<span><i class="line"></i>curva esperada</span>`:"")+
-    `<span><i class="line" style="background:var(--serious)"></i>troca de dieta</span>`;
-  $("#bNote").innerHTML = (tr.length? tr.map(t=>`Troca em ${fmtD(t.p.dt)} (dia ${t.p.dias}): ${esc(t.de)} → ${esc(t.para)}`).join("<br>") : "Sem troca de dieta no período.")+
-    (modo==="ms"?"":"") ;
-  const hit=$("#bHit"), tip=$("#bTip"), cross=$("#bCross"), svg=box.querySelector("svg");
-  hit.addEventListener("mousemove",ev=>{
-    const b=svg.getBoundingClientRect(), sx=(ev.clientX-b.left)*W/b.width;
-    const d=Math.round(dmin+(sx-m.l)/(W-m.l-m.r)*(dmax-dmin)); const p=h.find(q=>q.dias===d); if(!p) return;
-    cross.setAttribute("x1",x(d)); cross.setAttribute("x2",x(d)); cross.setAttribute("opacity",.5);
-    tip.innerHTML=`${fmtD(p.dt)} · dia ${p.dias}<br><b>${fmt(p[key])}${key==="pv"?"% PV":" kg MS"}</b>${p.src==="sim"?" (simulado)":""}<br>${esc(p.racao)}`;
-    tip.style.left=(x(d)*b.width/W)+"px"; tip.style.top=(y(p[key])*b.height/H)+"px"; tip.style.opacity=1;
-  });
-  hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
-}
 
 /* ---------- fazendas (ADM): cadastrar, editar, senhas ---------- */
 const ERROS_FAZ = {
