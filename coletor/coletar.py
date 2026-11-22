@@ -3,7 +3,9 @@ e grava no banco (Supabase/PostgreSQL).
 
 Variáveis de ambiente (ficam nos "Secrets" do GitHub, nunca no código):
   DATABASE_URL  – conexão do Supabase (Connect → Session pooler)
-  FAZENDAS      – JSON com o e-mail de cada fazenda, ex.:
+  FAZENDAS      – OPCIONAL. As fazendas são cadastradas no app (aba Fazendas), com a
+                  senha de app guardada no Vault do Supabase. Este secret só serve para
+                  fazendas ainda não cadastradas no app; formato:
                   [{"id": "fernanda", "email": "cocho.fernanda@gmail.com",
                     "senha_app": "abcd efgh ijkl mnop", "remetente": ""}]
                   "remetente" é opcional: só aceita e-mails desse endereço/domínio.
@@ -86,6 +88,25 @@ def gravar(conn, fazenda_id: str, meta: dict, baias: list[dict], arquivo: str, m
         sql = f"insert into public.baias_dia({','.join(cols)}) values ({','.join(['%s'] * len(cols))})"
         cur.executemany(sql, [[fazenda_id, meta["data_ref"]] + [b.get(c) for c in COLUNAS] for b in baias])
     return "atualizado" if atual else "novo"
+
+
+def lista_fazendas(conn) -> list[dict]:
+    """Fazendas com e-mail configurado: as do app (banco/Vault) e, para as que não
+    estiverem lá, as do secret FAZENDAS."""
+    lista = []
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select id, email, senha_app, remetente from public.robo_fazendas()")
+            lista = [{"id": i, "email": e, "senha_app": s, "remetente": r or ""} for i, e, s, r in cur.fetchall()]
+    except psycopg.errors.UndefinedFunction:
+        conn.rollback()          # 04_fazendas_no_app.sql ainda não instalado: usa só o secret
+    try:
+        extra = json.loads(os.environ.get("FAZENDAS") or "[]")
+    except json.JSONDecodeError as e:
+        log(conn, None, "erro", f"o secret FAZENDAS não é um JSON válido: {e}")
+        extra = []
+    ids = {f["id"] for f in lista}
+    return lista + [f for f in extra if f.get("id") not in ids]
 
 
 def fazendas_cadastradas(conn) -> dict:
@@ -222,12 +243,10 @@ def main():
             r = gravar(conn, a.fazenda, meta, baias, os.path.basename(a.arquivo), f"arquivo:{os.path.basename(a.arquivo)}")
             log(conn, a.fazenda, "ok", f"importado manualmente {meta['data_ref']} ({r}): {meta['n_baias']} baias")
             return
-        try:
-            fazendas = json.loads(os.environ.get("FAZENDAS") or "[]")
-        except json.JSONDecodeError as e:
-            sys.exit(f"O secret FAZENDAS não é um JSON válido: {e}")
+        fazendas = lista_fazendas(conn)
         if not fazendas:
-            sys.exit("O secret FAZENDAS está vazio")
+            log(conn, None, "erro", "nenhuma fazenda com e-mail configurado (cadastre na aba Fazendas do app)")
+            sys.exit(1)
         if a.verificar:
             sys.exit(1 if verificar(conn, fazendas) else 0)
         erros = coletar(conn, fazendas, a.dias)

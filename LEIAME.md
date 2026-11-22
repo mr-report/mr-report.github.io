@@ -10,7 +10,7 @@ E-mail da fazenda (Gmail)  ──►  Robô (GitHub Actions, 21:30)  ──►  
 | Pasta | O que tem |
 |---|---|
 | `coletor/` | `leitor_tgc.py` (lê o PDF) e `coletar.py` (busca no e-mail e grava no banco) |
-| `supabase/` | `01_banco.sql` (tabelas e funções), `02_cadastrar_fazendas.sql` (senhas) e `03_botao_atualizar.sql` (botão Atualizar) |
+| `supabase/` | `01_banco.sql` (tabelas e funções), `02_cadastrar_fazendas.sql` (senhas), `03_botao_atualizar.sql` (botão Atualizar) e `04_fazendas_no_app.sql` (cadastro de fazendas pelo app) |
 | `app/` | o app (uma página + funcionamento offline) |
 | `.github/workflows/` | agendamento da coleta, publicação do app e "manter ativo" |
 | `testes/` | testes locais do robô |
@@ -91,8 +91,19 @@ pedir ao GitHub que rode o robô.
   incluindo o horário da última execução do robô.
 - Fora desses horários, qualquer usuário pode tocar em **Atualizar** no app para o robô conferir o e-mail na hora.
 
+### 5. Cadastro de fazendas pelo app
+1. No Supabase (SQL Editor), rode `supabase/04_fazendas_no_app.sql` inteiro, uma vez.
+2. No app, entre como administrador e abra a aba **Fazendas (ADM)**.
+3. Em cada fazenda, clique em **Editar** e preencha o **e-mail** e a **senha de app do Gmail**. A senha de app vai
+   direto para o cofre criptografado do Supabase (Vault) e não pode ser lida de volta, nem pelo app.
+4. Depois que todas as fazendas estiverem com "e-mail configurado", o secret `FAZENDAS` do GitHub deixa de ser
+   necessário. Pode apagá-lo. Enquanto existir, ele só vale para fazendas que não estejam configuradas no app.
+
 ## Manutenção
-- **Nova fazenda**: rode `definir_fazenda(...)` no Supabase e acrescente a fazenda no secret `FAZENDAS`.
+- **Nova fazenda**: no app, aba **Fazendas (ADM) → + Nova fazenda**. Preencha nome, senha da equipe, e-mail e senha de app.
+  Não precisa mexer no Supabase nem no GitHub.
+- **Desativar fazenda**: na mesma aba, **Editar → Opções avançadas → desmarcar "Fazenda ativa"**. Ela some do app,
+  a coleta para e os dados continuam guardados.
 - **Token do botão vencido**: o app mostra "Não consegui acionar o robô (GitHub 401)". Gere um token novo e rode
   `select vault.update_secret((select id from vault.secrets where name='github_token'), 'NOVO_TOKEN');`
 - **Trocar senha**: rode `definir_fazenda(...)` ou `definir_senha_adm(...)` de novo. Quem estava logado com a senha antiga sai.

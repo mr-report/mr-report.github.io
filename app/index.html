@@ -164,6 +164,7 @@ tbody tr:hover td{background:var(--accent-soft)}
       <button data-tab="painel" class="on">Painel</button>
       <button data-tab="baias">Baias</button>
       <button data-tab="adm" class="adm-only hidden">Cadastros (ADM)</button>
+      <button data-tab="fazendas" class="adm-only hidden">Fazendas (ADM)</button>
     </nav>
   </header>
   <main>
@@ -201,6 +202,7 @@ tbody tr:hover td{background:var(--accent-soft)}
     </div>
 
     <div id="tab-adm" class="hidden"></div>
+    <div id="tab-fazendas" class="hidden"></div>
   </main>
 </section>
 
@@ -463,6 +465,7 @@ function iniciar(sessao){
   const ultima = LS.get("ultimaFazenda");
   setTab("painel");
   if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
+  else if(S.user.admin){ mostrarVazio("Nenhuma fazenda cadastrada ainda."); setTab("fazendas"); }
   else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
 }
 
@@ -563,7 +566,7 @@ function mostrarFazenda(){
   renderSync();
   if(!datas.length){ mostrarVazio("Nenhum relatório recebido ainda para esta fazenda. Assim que o primeiro PDF chegar no e-mail, ele aparece aqui."); $("#dateSel").innerHTML=""; if(S.tab==="adm") renderAdm(); return; }
   $("#vazio").classList.add("hidden");
-  if(S.tab!=="adm") $("#tab-"+S.tab).classList.remove("hidden");
+  if(!abaAdm(S.tab)) $("#tab-"+S.tab).classList.remove("hidden");
   const atual = $("#dateSel").value;
   $("#dateSel").innerHTML = datas.map(d=>`<option>${d}</option>`).join("");
   // mantém a data escolhida, mas se a pessoa estava no relatório mais recente e chegou um novo, pula para o novo
@@ -573,13 +576,15 @@ function mostrarFazenda(){
   $("#avisoCfg").classList.toggle("hidden", !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
   refresh();
 }
+const abaAdm = t => t==="adm" || t==="fazendas";
 function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["painel","baias","adm"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (x!=="adm" && semDados)));
-  $("#vazio").classList.toggle("hidden", t==="adm" || !semDados || !$("#vazio").textContent);
+  ["painel","baias","adm","fazendas"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
+  $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
   if(t==="adm") renderAdm();
+  if(t==="fazendas") renderFazendas();
 }
 function refresh(){
   if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
@@ -812,6 +817,113 @@ function renderBaiaChart(r,modo){
     tip.style.left=(x(d)*b.width/W)+"px"; tip.style.top=(y(p[key])*b.height/H)+"px"; tip.style.opacity=1;
   });
   hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
+}
+
+/* ---------- fazendas (ADM): cadastrar, editar, senhas ---------- */
+const ERROS_FAZ = {
+  codigo_invalido: "Código inválido: use só letras minúsculas, números e hífen (ex.: santa-rita).",
+  nome_obrigatorio: "Informe o nome da fazenda.",
+  email_invalido: "E-mail inválido.",
+  senha_app_invalida: "A senha de app do Gmail tem 16 letras (os espaços não importam). Confira o que foi colado.",
+  senha_equipe_obrigatoria: "Defina a senha que a equipe vai usar para entrar.",
+  senha_repetida: "Essa senha já é usada por outra fazenda ou pelo administrador. Escolha outra."
+};
+const slug = s => (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);
+let FZ_LISTA = [];
+async function renderFazendas(){
+  const el = $("#tab-fazendas"); if(!S.user || !S.user.admin) return;
+  el.innerHTML = `<div class="loading">Carregando fazendas…</div>`;
+  try{ FZ_LISTA = await rpc("adm_listar_fazendas", {p_token:S.sessao.token}); }
+  catch(err){
+    if(err.cod==="sessao") return alertaSessao();
+    el.innerHTML = `<div class="card">${err.cod==="offline" ? "Sem internet: o cadastro de fazendas precisa de conexão." :
+      /PGRST202|adm_listar_fazendas/.test(err.message) ? "O cadastro de fazendas pelo app ainda não foi instalado no banco (arquivo supabase/04_fazendas_no_app.sql)." : esc(err.message)}</div>`;
+    return;
+  }
+  atualizarListaSessao();
+  const st = f => {
+    const ev = f.ultimo_evento;
+    const emailOk = f.email && f.tem_senha_app;
+    return `<span class="chip ${f.ativa?"ok":"medio"}">${f.ativa?"ativa":"desativada"}</span> ` +
+      (emailOk ? `<span class="chip ok">e-mail configurado</span>` : `<span class="chip alto">falta ${!f.email?"e-mail":"senha de app"}</span>`) +
+      (ev && ev.status!=="ok" ? ` <span class="chip alto" title="${esc(ev.detalhe||"")}">${esc(ev.status)}</span>` : "");
+  };
+  el.innerHTML = `
+    <div class="row-actions" style="margin:0 0 12px"><button class="btn" id="fzNova">+ Nova fazenda</button></div>
+    <div id="fzForm"></div>
+    <div class="alerts">${FZ_LISTA.map(f=>`
+      <div class="card" style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+        <div><b>${esc(f.nome)}</b> <small style="color:var(--ink2)">(${esc(f.id)})</small><br>
+          <span style="font-size:13px;color:var(--ink2)">${esc(f.email||"sem e-mail")} · ${f.ultimo_relatorio?"último relatório "+isoParaBR(f.ultimo_relatorio):"nenhum relatório ainda"}</span><br>
+          <div style="margin-top:6px">${st(f)}</div>
+          ${f.ultimo_evento && f.ultimo_evento.status!=="ok" ? `<div style="font-size:12px;color:var(--crit);margin-top:4px">${esc(f.ultimo_evento.detalhe||"")}</div>` : ""}
+        </div>
+        <button class="btn ghost small" data-edit="${esc(f.id)}">Editar</button>
+      </div>`).join("") || `<div class="empty">Nenhuma fazenda cadastrada.</div>`}</div>`;
+  $("#fzNova").onclick = ()=>formFazenda(null);
+  el.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>formFazenda(FZ_LISTA.find(f=>f.id===b.dataset.edit)));
+}
+function atualizarListaSessao(){
+  const ativas = FZ_LISTA.filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}));
+  S.sessao.fazendas = ativas; LS.set("sessao", S.sessao);
+  $("#farmSel").innerHTML = ativas.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+  $("#farmSel").classList.toggle("hidden", ativas.length<2);
+  if(S.farm && ativas.some(f=>f.id===S.farm)) $("#farmSel").value = S.farm;
+  else if(ativas.length){ setFarm(ativas[0].id); }
+}
+function formFazenda(f){
+  const nova = !f;
+  const box = $("#fzForm");
+  box.innerHTML = `<div class="card adm-section">
+    <h3 style="margin-top:0">${nova?"Nova fazenda":"Editar "+esc(f.nome)}</h3>
+    <label class="field"><span>Nome da fazenda</span><input type="text" id="fzNome" value="${esc(f?f.nome:"")}" placeholder="ex.: Fazenda Santa Rita"></label>
+    <label class="field"><span>Código (curto, sem espaços${nova?"":" – não pode ser alterado"})</span><input type="text" id="fzId" value="${esc(f?f.id:"")}" ${nova?"":"disabled"} placeholder="gerado a partir do nome"></label>
+    <label class="field"><span>Senha da equipe (para entrar no app)${nova?"":" – deixe em branco para manter a atual"}</span><input type="text" id="fzSenha" autocomplete="off" placeholder="${nova?"ex.: santarita2026":"(mantém a atual)"}"></label>
+    <label class="field"><span>E-mail que recebe o PDF do TGC</span><input type="text" id="fzEmail" inputmode="email" value="${esc(f&&f.email?f.email:"")}" placeholder="ex.: santarita.mr.report@gmail.com"></label>
+    <label class="field"><span>Senha de app do Gmail (16 letras)${!nova&&f.tem_senha_app?" – guardada ✓, deixe em branco para manter":""}</span>
+      <input type="password" id="fzApp" autocomplete="new-password" placeholder="${!nova&&f.tem_senha_app?"•••• •••• •••• ••••":"abcd efgh ijkl mnop"}"></label>
+    <p class="help" style="font-size:12px;color:var(--ink2);margin:-4px 0 10px">Gere em myaccount.google.com/apppasswords, logado no e-mail da fazenda (precisa da verificação em 2 etapas). A senha vai direto para o cofre criptografado do banco e não pode ser vista depois, nem aqui.</p>
+    <details style="margin-bottom:10px"><summary style="font-size:13px;cursor:pointer">Opções avançadas</summary>
+      <label class="field" style="margin-top:8px"><span>Aceitar só e-mails deste remetente (opcional)</span><input type="text" id="fzRem" value="${esc(f&&f.remetente?f.remetente:"")}" placeholder="ex.: tgc@fazenda.com.br"></label>
+      ${nova?"":`<label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="fzAtiva" ${f.ativa?"checked":""}> Fazenda ativa (desmarque para esconder do app e parar a coleta)</label>`}
+    </details>
+    <div class="row-actions"><button class="btn" id="fzSalvar">Salvar</button><button class="btn ghost" id="fzCancelar">Cancelar</button><span class="saved" id="fzMsg"></span></div>
+  </div>`;
+  box.scrollIntoView({behavior:"smooth", block:"start"});
+  if(nova) $("#fzNome").addEventListener("input", ()=>{ if(!$("#fzId").dataset.mexeu) $("#fzId").value = slug($("#fzNome").value).replace(/^(fazenda|faz|confinamento|conf|sitio|estancia)-/,""); });
+  if(nova) $("#fzId").addEventListener("input", ()=>{ $("#fzId").dataset.mexeu = "1"; });
+  $("#fzCancelar").onclick = ()=>{ box.innerHTML=""; };
+  $("#fzSalvar").onclick = async ()=>{
+    const msg = $("#fzMsg"); msg.style.color = "var(--crit)";
+    const id = nova ? slug($("#fzId").value || $("#fzNome").value) : f.id;
+    const app = $("#fzApp").value.replace(/\s/g,"");
+    if(!$("#fzNome").value.trim()) return msg.textContent = ERROS_FAZ.nome_obrigatorio;
+    if(nova && !$("#fzSenha").value.trim()) return msg.textContent = ERROS_FAZ.senha_equipe_obrigatoria;
+    if(app && !/^[a-zA-Z]{16}$/.test(app)) return msg.textContent = ERROS_FAZ.senha_app_invalida;
+    if(nova && (!$("#fzEmail").value.trim() || !app)) { if(!confirmarSemEmail()) return; }
+    const nomeDigitado = $("#fzNome").value.trim();
+    $("#fzSalvar").disabled = true; msg.style.color = "var(--ink2)"; msg.textContent = "Salvando…";
+    try{
+      const r = await rpc("adm_salvar_fazenda", {p_token:S.sessao.token, p_id:id, p_nome:$("#fzNome").value, p_senha_equipe:$("#fzSenha").value.trim(),
+        p_email:$("#fzEmail").value.trim(), p_senha_app:app, p_remetente:$("#fzRem").value.trim(), p_ativa: nova ? true : $("#fzAtiva").checked});
+      await renderFazendas();
+      const m = document.createElement("div"); m.className="proto"; m.style.background="var(--good-bg)";
+      m.innerHTML = r.criada ? `<b>${esc(nomeDigitado)}</b> cadastrada. Toque em <b>Atualizar</b> para o robô conferir o e-mail agora, ou aguarde a rodada das 21h30.` : "Alterações salvas.";
+      $("#tab-fazendas").prepend(m);
+    }catch(err){
+      if(err.cod==="sessao") return alertaSessao();
+      const k = Object.keys(ERROS_FAZ).find(k=>err.message.includes(k));
+      msg.style.color = "var(--crit)"; msg.textContent = k ? ERROS_FAZ[k] : err.message;
+      $("#fzSalvar").disabled = false;
+    }
+  };
+  function confirmarSemEmail(){
+    const m = $("#fzMsg");
+    if(m.dataset.avisado) return true;
+    m.dataset.avisado = "1"; m.style.color = "var(--crit)";
+    m.textContent = "Sem e-mail e senha de app o robô não consegue buscar os relatórios. Clique em Salvar de novo para cadastrar assim mesmo.";
+    return false;
+  }
 }
 
 /* ---------- cadastros (ADM) ---------- */
