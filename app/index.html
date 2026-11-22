@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mr. Report – Análise de Confinamento</title>
+<meta name="theme-color" content="#2a78d6">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icone-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<script src="config.js"></script>
+<style>
+:root{
+  --bg:#f9f9f7; --surface:#fcfcfb; --card:#ffffff; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984;
+  --line:#e6e5e0; --accent:#2a78d6; --accent-soft:#e6f0fb;
+  --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --crit:#d03b3b;
+  --good-bg:#e8f6e8; --warn-bg:#fff5df; --crit-bg:#fbeaea;
+  --radius:12px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#0d0d0d; --surface:#1a1a19; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e88;
+    --line:#2e2e2c; --accent:#3987e5; --accent-soft:#1b2a3d; --good-bg:#132613; --warn-bg:#2e250f; --crit-bg:#2f1616; }
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4}
+button,input,select{font:inherit;color:inherit}
+.hidden{display:none!important}
+/* login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;width:100%;max-width:360px}
+.login-box h1{font-size:22px;margin:0 0 4px}
+.login-box p{color:var(--ink2);margin:0 0 18px;font-size:14px}
+.field{display:block;margin-bottom:12px}
+.field span{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
+input[type=password],input[type=text],input[type=number],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.btn{border:0;background:var(--accent);color:#fff;padding:10px 16px;border-radius:10px;cursor:pointer;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink2);border:1px solid var(--line)}
+.btn.small{padding:6px 10px;font-size:13px;font-weight:500}
+.btn.block{width:100%}
+.err{color:var(--crit);font-size:13px;min-height:18px;margin-top:8px}
+.demo{margin-top:18px;padding:12px;border-radius:10px;background:var(--accent-soft);font-size:13px;color:var(--ink2)}
+.demo code{background:var(--card);padding:1px 6px;border-radius:6px;color:var(--ink)}
+/* app shell */
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 16px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+.brand{font-weight:700;font-size:17px;margin-right:auto}
+.brand small{display:block;font-weight:400;color:var(--ink2);font-size:12px}
+.bar select{width:auto;padding:7px 10px}
+nav{display:flex;gap:4px;max-width:1100px;margin:0 auto;padding:0 12px;overflow-x:auto}
+nav button{background:none;border:0;padding:10px 12px;border-bottom:2px solid transparent;color:var(--ink2);cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.proto{font-size:12px;color:var(--ink2);background:var(--warn-bg);border-radius:8px;padding:8px 12px;margin-bottom:14px}
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--ink2)}
+.kpi .v{font-size:24px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--muted)}
+h2{font-size:17px;margin:20px 0 10px}
+h3{font-size:15px;margin:16px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+/* alerts */
+.alerts{display:grid;gap:8px}
+.alert{display:flex;gap:10px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:10px 12px;cursor:pointer}
+.alert.alto{border-left-color:var(--crit)}
+.alert.medio{border-left-color:var(--warn)}
+.alert .cur{font-weight:700;min-width:54px}
+.alert .msg{font-size:14px}
+.alert .msg small{display:block;color:var(--ink2);font-size:12px}
+.empty{color:var(--ink2);font-size:14px;padding:12px}
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:999px;white-space:nowrap;font-weight:600}
+.chip.ok{background:var(--good-bg);color:var(--good)}
+.chip.medio{background:var(--warn-bg);color:#9a6a00}
+.chip.alto{background:var(--crit-bg);color:var(--crit)}
+@media (prefers-color-scheme:dark){.chip.medio{color:var(--warn)}}
+/* table */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.filters select,.filters input{width:auto;min-width:140px;padding:7px 10px}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{font-size:12px;color:var(--ink2);font-weight:600;background:var(--surface);position:sticky;top:0;cursor:pointer;user-select:none}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;background:var(--card)}
+th:first-child{background:var(--surface);z-index:1}
+td.l,th.l{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--accent-soft)}
+.up{color:var(--good)} .down{color:var(--crit)}
+/* chart */
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .1s}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink2);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.legend i.line{width:16px;height:2px;border-radius:0;vertical-align:3px;background:var(--muted)}
+/* modal */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+@media(min-width:700px){#modal{align-items:center}}
+.sheet{background:var(--card);width:100%;max-width:620px;max-height:90vh;overflow:auto;border-radius:16px 16px 0 0;padding:18px}
+@media(min-width:700px){.sheet{border-radius:16px}}
+.sheet h2{margin:0 0 2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mini{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.mini .l{font-size:11px;color:var(--ink2)}
+.mini .v{font-weight:700;font-variant-numeric:tabular-nums}
+.check{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.check:last-child{border-bottom:0}
+.check b{display:block;font-size:14px}
+.check p{margin:2px 0 0;font-size:13px;color:var(--ink2)}
+.ico{flex:0 0 22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.ico.ok{background:var(--good)} .ico.medio{background:var(--warn);color:#3a2a00} .ico.alto{background:var(--crit)}
+.score{display:flex;gap:6px}
+.score span{flex:1;text-align:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 0;font-weight:700}
+.score span small{display:block;font-weight:400;font-size:11px;color:var(--ink2)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:8px}
+.seg button{border:0;background:transparent;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--ink2)}
+.seg button.on{background:var(--accent);color:#fff}
+.note{font-size:12px;color:var(--ink2);margin-top:6px}
+/* admin */
+.adm-section{margin-bottom:18px}
+.adm-section p.help{font-size:13px;color:var(--ink2);margin:0 0 10px}
+.edit td{padding:4px 6px}
+.edit input,.edit select{padding:6px 8px;font-size:13px;min-width:70px}
+.row-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.saved{font-size:13px;color:var(--good);align-self:center}
+.sync{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);max-width:1100px;margin:0 auto;padding:0 16px 8px}
+.sync .off{background:var(--warn-bg);color:#9a6a00;border-radius:999px;padding:1px 8px;font-weight:600}
+.sync button{background:none;border:0;color:var(--accent);cursor:pointer;font-size:12px;padding:0}
+.loading{color:var(--ink2);padding:24px 0;text-align:center}
+.status-grid{display:grid;gap:8px}
+.st-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
+.st-row:last-child{border-bottom:0}
+.log{font-size:12px;max-height:240px;overflow:auto}
+.log div{padding:4px 0;border-bottom:1px solid var(--line)}
+.log b.ok{color:var(--good)} .log b.erro,.log b.faltando{color:var(--crit)} .log b.ignorado{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<section id="login">
+  <form class="login-box" id="loginForm">
+    <h1>Mr. Report</h1>
+    <p>Entre com a senha da sua fazenda.</p>
+    <label class="field"><span>Senha</span><input type="password" id="pwd" autocomplete="current-password" required></label>
+    <button class="btn block" type="submit" id="btnEntrar">Entrar</button>
+    <div class="err" id="loginErr"></div>
+
+  </form>
+</section>
+
+<section id="app" class="hidden">
+  <header>
+    <div class="bar">
+      <div class="brand" id="brand">–<small id="brandSub"></small></div>
+      <select id="farmSel" class="hidden" aria-label="Confinamento"></select>
+      <select id="dateSel" aria-label="Data do relatório"></select>
+      <button class="btn ghost small" id="logout">Sair</button>
+    </div>
+    <div class="sync" id="sync"></div>
+    <nav id="tabs">
+      <button data-tab="painel" class="on">Painel</button>
+      <button data-tab="baias">Baias</button>
+      <button data-tab="adm" class="adm-only hidden">Cadastros (ADM)</button>
+    </nav>
+  </header>
+  <main>
+    <div class="proto hidden" id="avisoCfg">Esta fazenda ainda usa os <b>cadastros de exemplo</b> (curva, escore, limites). O administrador ajusta em “Cadastros”.</div>
+    <div class="loading hidden" id="vazio"></div>
+
+    <div id="tab-painel" class="tabc">
+      <div class="filters">
+        <select id="pSexo" aria-label="Sexo"><option value="">Todos os sexos</option><option>Macho</option><option>Fêmea</option></select>
+        <select id="pDieta" aria-label="Dieta"></select>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <h2>Alertas do dia</h2>
+      <div class="alerts" id="alerts"></div>
+      <h2>Consumo (%PV) × curva esperada <small id="chartFiltro" style="font-weight:400;color:var(--ink2);font-size:13px"></small></h2>
+      <div class="card">
+        <div class="chart" id="chart"></div>
+        <div class="legend" id="chartLegend"></div>
+      </div>
+    </div>
+
+    <div id="tab-baias" class="hidden tabc">
+      <div class="filters">
+        <input type="text" id="fBusca" placeholder="Buscar curral…">
+        <select id="fDieta"></select>
+        <select id="fStatus">
+          <option value="">Todos os status</option>
+          <option value="alto">Só alertas altos</option>
+          <option value="medio">Alertas (alto + médio)</option>
+          <option value="ok">Sem alerta</option>
+        </select>
+      </div>
+      <div class="tablewrap"><table id="tbl"></table></div>
+      <p style="font-size:12px;color:var(--ink2)">Toque em uma baia para ver o detalhe. Toque no cabeçalho para ordenar.</p>
+    </div>
+
+    <div id="tab-adm" class="hidden"></div>
+  </main>
+</section>
+
+<div id="modal" class="hidden"><div class="sheet" id="sheet"></div></div>
+
+<script>
+/* ---------- conexão com o banco (Supabase) ---------- */
+const CFG = window.COCHO_CFG || {};
+const DATA = {};          // DATA[fazenda] = {nome, relatorios:{"dd/mm/aaaa":[baias]}}
+const SRV = {};           // SRV[fazenda] = {config, config_atualizado_em, gerado_em}
+const DIAS_HIST = 200;    // quantos dias de histórico o app guarda
+
+class ErroAPI extends Error { constructor(msg, cod){ super(msg); this.cod = cod; } }
+async function rpc(fn, body){
+  if(!CFG.url || !CFG.chave) throw new ErroAPI("App sem configuração do banco (config.js).","config");
+  const h = {"Content-Type":"application/json", apikey: CFG.chave};
+  if(CFG.chave.startsWith("eyJ")) h.Authorization = "Bearer " + CFG.chave;
+  let r;
+  try{ r = await fetch(CFG.url.replace(/\/$/,"") + "/rest/v1/rpc/" + fn, {method:"POST", headers:h, body:JSON.stringify(body)}); }
+  catch(e){ throw new ErroAPI("Sem conexão com a internet.","offline"); }
+  const txt = await r.text(); let j = null; try{ j = txt ? JSON.parse(txt) : null; }catch(e){}
+  if(!r.ok){
+    const m = (j && (j.message || j.msg)) || txt || ("erro " + r.status);
+    if(/senha_invalida/.test(m)) throw new ErroAPI("Senha não reconhecida.","senha");
+    if(/sessao_expirada/.test(m)) throw new ErroAPI("Sua sessão expirou. Entre de novo.","sessao");
+    if(/sem_permissao/.test(m)) throw new ErroAPI("Sem permissão para isso.","permissao");
+    if(/botao_nao_configurado/.test(m)) throw new ErroAPI("A busca no e-mail ainda não foi configurada pelo administrador.","nao_configurado");
+    throw new ErroAPI("Erro no servidor: " + m, "servidor");
+  }
+  return j;
+}
+
+/* armazenamento local: sessão no localStorage, dados no IndexedDB (cabem mais) */
+const LS = {
+  get(k){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const IDB = (()=>{
+  const mem = {}; let dbp = null;
+  function db(){
+    if(dbp) return dbp;
+    dbp = new Promise((ok,err)=>{ try{ const q = indexedDB.open("cocho",1);
+      q.onupgradeneeded = ()=>q.result.createObjectStore("kv");
+      q.onsuccess = ()=>ok(q.result); q.onerror = ()=>err(q.error); }catch(e){ err(e); } });
+    return dbp;
+  }
+  return {
+    async get(k){ try{ const d = await db(); return await new Promise((ok,err)=>{ const q = d.transaction("kv").objectStore("kv").get(k); q.onsuccess=()=>ok(q.result ?? null); q.onerror=()=>err(q.error); }); }catch(e){ return mem[k] ?? null; } },
+    async set(k,v){ mem[k]=v; try{ const d = await db(); await new Promise((ok,err)=>{ const tx = d.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=ok; tx.onerror=()=>err(tx.error); }); }catch(e){} },
+    async limpar(){ for(const k in mem) delete mem[k]; try{ const d = await db(); await new Promise(ok=>{ const tx=d.transaction("kv","readwrite"); tx.objectStore("kv").clear(); tx.oncomplete=ok; tx.onerror=ok; }); }catch(e){} }
+  };
+})();
+
+const isoParaBR = s => { if(!s) return s; const [y,m,d] = s.slice(0,10).split("-"); return `${d}/${m}/${y}`; };
+const isoParaBRc = s => { if(!s) return s; const [y,m,d] = s.slice(0,10).split("-"); return `${d}/${m}/${y.slice(2)}`; };
+const isoHoje = (dias=0) => { const d = new Date(); d.setDate(d.getDate()+dias); return d.toISOString().slice(0,10); };
+
+/* transforma o cache bruto no formato usado pelas análises */
+function montar(fid, c){
+  const rel = {};
+  (c.baias||[]).forEach(b=>{
+    const k = isoParaBR(b.data_ref);
+    (rel[k] = rel[k] || []).push({...b, dt_entrada: isoParaBRc(b.dt_entrada), dt_abate: isoParaBRc(b.dt_abate)});
+  });
+  DATA[fid] = { nome: c.nome, relatorios: rel };
+  SRV[fid] = { config: c.config, config_atualizado_em: c.config_atualizado_em, gerado_em: c.gerado_em, relatorios: c.relatorios || [] };
+  delete cfgCache[fid];
+}
+
+/* baixa só o que mudou desde o último relatório guardado (com 3 dias de folga para correções) */
+async function sincronizar(fid){
+  const c = (await IDB.get("dados:"+fid)) || { baias:[], relatorios:[] };
+  const ultimo = (c.relatorios||[]).reduce((m,r)=>r.data_ref>m?r.data_ref:m, "");
+  let desde = isoHoje(-DIAS_HIST);
+  if(ultimo){ const d = new Date(ultimo+"T12:00:00"); d.setDate(d.getDate()-3); const x = d.toISOString().slice(0,10); if(x>desde) desde = x; }
+  const r = await rpc("dados", {p_token: S.sessao.token, p_fazenda: fid, p_desde: desde});
+  const corte = isoHoje(-DIAS_HIST);
+  const novo = {
+    nome: r.fazenda ? r.fazenda.nome : (c.nome || fid),
+    baias: (c.baias||[]).filter(b=>b.data_ref < desde && b.data_ref >= corte).concat(r.baias||[]),
+    relatorios: (c.relatorios||[]).filter(x=>x.data_ref < desde && x.data_ref >= corte).concat(r.relatorios||[]),
+    config: r.config, config_atualizado_em: r.config_atualizado_em, gerado_em: r.gerado_em
+  };
+  await IDB.set("dados:"+fid, novo);
+  montar(fid, novo);
+  return novo;
+}
+
+/* ---------- cadastros de exemplo ---------- */
+function defaultConfig(farmId){
+  const cts = new Set();
+  Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>cts.add(String(r.ct))));
+  const femea = ["NE","NX","VS","NO","VA","FE"];
+  const categorias = {}; [...cts].sort().forEach(c=>categorias[c] = femea.includes(c)?"Fêmea":"Macho");
+  const faixas = [[1,20,2.00],[21,40,2.30],[41,65,2.45],[66,90,2.35],[91,110,2.25],[111,250,2.15]];
+  const curva = [];
+  faixas.forEach(([a,b,v])=>{
+    curva.push({sexo:"Macho",pesoMin:0,pesoMax:9999,diaIni:a,diaFim:b,pv:v});
+    curva.push({sexo:"Fêmea",pesoMin:0,pesoMax:9999,diaIni:a,diaFim:b,pv:+(v-0.10).toFixed(2)});
+  });
+  const dietas = new Set();
+  Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>dietas.add(r.racao)));
+  const limites = {"Padrão":{ontem:5,cinco:8,curva:0.20,escore:3}};
+  [...dietas].sort().forEach(d=>limites[d]={...limites["Padrão"]});
+  return {
+    categorias, curva, catInfoTitulo:"Informações adicionais", catInfo:{},
+    escore:[{nota:0,ajuste:10},{nota:0.5,ajuste:5},{nota:1,ajuste:0},{nota:1.5,ajuste:-5},{nota:2,ajuste:-10},{nota:3,ajuste:-15}],
+    limites
+  };
+}
+const cfgCache = {};
+function getConfig(farmId){
+  if(!cfgCache[farmId]){
+    const srv = SRV[farmId] && SRV[farmId].config;
+    const c = (srv && Object.keys(srv).length) ? JSON.parse(JSON.stringify(srv)) : defaultConfig(farmId);
+    // siglas e dietas que apareceram depois do último cadastro entram com valores padrão
+    const d = defaultConfig(farmId);
+    c.categorias = c.categorias || {}; Object.keys(d.categorias).forEach(k=>{ if(!(k in c.categorias)) c.categorias[k]=d.categorias[k]; });
+    c.limites = c.limites || {"Padrão":d.limites["Padrão"]}; Object.keys(d.limites).forEach(k=>{ if(!(k in c.limites)) c.limites[k]={...(c.limites["Padrão"]||d.limites["Padrão"])}; });
+    c.curva = c.curva || d.curva; c.escore = c.escore || d.escore;
+    if(c.catInfoTitulo==null) c.catInfoTitulo="Informações adicionais";
+    if(!c.catInfo) c.catInfo={};
+    cfgCache[farmId]=c;
+  }
+  return cfgCache[farmId];
+}
+
+/* ---------- análises ---------- */
+const fmt = (v,d=2)=> v==null||isNaN(v) ? "–" : v.toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct = (v,d=1)=> v==null||isNaN(v) ? "–" : (v>0?"+":"")+fmt(v,d)+"%";
+const pp  = (v)=> v==null||isNaN(v) ? "–" : (v>0?"+":"")+fmt(v,2)+" p.p.";
+
+function esperado(cfg, r){
+  const sexo = cfg.categorias[String(r.ct)];
+  if(!sexo) return {pv:null, sexo:null};
+  const f = cfg.curva.find(c=>c.sexo===sexo && r.peso_entrada>=c.pesoMin && r.peso_entrada<=c.pesoMax && r.dias_conf>=c.diaIni && r.dias_conf<=c.diaFim);
+  return {pv: f?f.pv:null, sexo};
+}
+function ajusteNota(cfg, nota){
+  const e = cfg.escore.find(x=>Math.abs(x.nota-nota)<1e-9);
+  return e ? e.ajuste : null;
+}
+function limitesDe(cfg, dieta){ return cfg.limites[dieta] || cfg.limites["Padrão"]; }
+const SEV = {ok:0, medio:1, alto:2};
+
+function analisar(farmId, data){
+  const cfg = getConfig(farmId);
+  const rows = DATA[farmId].relatorios[data].map(r=>({...r}));
+  rows.forEach(r=>{
+    const L = limitesDe(cfg, r.racao);
+    r.dOntem = (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100;
+    r.d5 = (r.cons_dia_ms - r.ms_5d)/r.ms_5d*100;
+    const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv;
+    r.dCurva = e.pv==null ? null : r.cons_dia_pv - e.pv;
+    r.ajuste = ajusteNota(cfg, r.cocho_d1);
+    r.checks = [];
+    const add=(sev,titulo,texto,curto)=>r.checks.push({sev,titulo,texto,curto});
+
+    // 1. variação x ontem
+    if(Math.abs(r.dOntem) > L.ontem)
+      add(Math.abs(r.dOntem)>L.ontem*2?"alto":"medio","Consumo "+(r.dOntem<0?"caiu":"subiu")+" em relação a ontem",
+        `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_1d)} ontem (${pct(r.dOntem)}). Limite da dieta: ±${L.ontem}%.`, `${pct(r.dOntem)} × ontem`);
+    else add("ok","Variação em relação a ontem dentro do limite",`${pct(r.dOntem)} (limite ±${L.ontem}%).`);
+
+    // 2. variação x média 5 dias
+    if(Math.abs(r.d5) > L.cinco)
+      add(r.d5 < -L.cinco*1.5?"alto":"medio","Consumo "+(r.d5<0?"abaixo":"acima")+" da média dos últimos 5 dias",
+        `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_5d)} na média de 5 dias (${pct(r.d5)}). Limite: ±${L.cinco}%.`, `${pct(r.d5)} × média 5d`);
+    else add("ok","Variação em relação à média de 5 dias dentro do limite",`${pct(r.d5)} (limite ±${L.cinco}%).`);
+
+    // 3. dentro do esperado (curva)
+    if(r.pvEsp==null)
+      add("medio","Sem curva cadastrada para esta baia",`Categoria "${r.ct}"${r.sexo?" ("+r.sexo+")":" sem sexo cadastrado"}, ${r.dias_conf} dias, entrada ${fmt(r.peso_entrada,0)} kg. Cadastre em Cadastros.`, "sem curva");
+    else if(Math.abs(r.dCurva) > L.curva)
+      add(r.dCurva < -L.curva*2?"alto":"medio","Consumo "+(r.dCurva<0?"abaixo":"acima")+" da curva esperada",
+        `${fmt(r.cons_dia_pv)}% PV hoje × ${fmt(r.pvEsp)}% esperado para ${r.sexo.toLowerCase()} com ${r.dias_conf} dias (${pp(r.dCurva)}). Tolerância: ±${fmt(L.curva)} p.p.`, `${pp(r.dCurva)} × curva`);
+    else add("ok","Consumo dentro da curva esperada",`${fmt(r.cons_dia_pv)}% PV × ${fmt(r.pvEsp)}% esperado (${pp(r.dCurva)}).`);
+  });
+
+  // 4. escore de cocho: coerência com o consumo, com a curva e com o restante do confinamento
+  rows.forEach(r=>{
+    const L = limitesDe(cfg, r.racao);
+    if(r.ajuste==null){ r.checks.push({sev:"medio",titulo:`Nota ${fmt(r.cocho_d1,1)} sem ajuste cadastrado`,texto:"Cadastre o ajuste desta nota na tabela de escore.",curto:"nota sem ajuste"}); return; }
+    const probs = [];
+    const dif = r.dOntem - r.ajuste;
+    if(Math.abs(dif) > L.escore)
+      probs.push({sev: Math.sign(r.dOntem)!==Math.sign(r.ajuste) && r.ajuste!==0 ? "alto":"medio",
+        titulo:"Escore × consumo: variação diferente da que a nota pedia",
+        texto:`Nota de ontem ${fmt(r.cocho_d1,1)} pedia ajuste de ${pct(r.ajuste,0)}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
+    if(r.dCurva!=null){
+      if(r.ajuste>0 && r.dCurva > L.curva)
+        probs.push({sev:"medio",titulo:"Escore × curva: nota pede aumento, mas a baia já está acima da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} acima do esperado. Conferir a leitura do cocho.`,curto:"escore × curva"});
+      if(r.ajuste<0 && r.dCurva < -L.curva)
+        probs.push({sev:"alto",titulo:"Escore × curva: nota pede redução, mas a baia já está abaixo da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} abaixo do esperado. Verificar sanidade, água e dieta.`,curto:"escore × curva"});
+    }
+    // comparação com as baias da mesma dieta
+    const pares = rows.filter(o=>o!==r && o.racao===r.racao);
+    if(pares.length>=3){
+      const cont = {}; pares.forEach(o=>cont[o.cocho_d1]=(cont[o.cocho_d1]||0)+1);
+      const moda = +Object.entries(cont).sort((a,b)=>b[1]-a[1])[0][0];
+      const share = cont[moda]/pares.length;
+      const med = pares.map(o=>o.d5).sort((a,b)=>a-b)[Math.floor(pares.length/2)];
+      if(r.cocho_d1!==moda && share>=0.6 && Math.abs(r.d5-med) <= L.cinco/2)
+        probs.push({sev:"medio",titulo:"Escore × confinamento: nota fora do padrão da dieta",texto:`${Math.round(share*100)}% das baias com a mesma dieta tiveram nota ${fmt(moda,1)} ontem; esta teve ${fmt(r.cocho_d1,1)}, sem diferença de consumo que justifique (${pct(r.d5)} × mediana ${pct(med)} vs. média 5d).`,curto:"nota fora do padrão"});
+    }
+    // ajuste persistente
+    const a2 = ajusteNota(cfg,r.cocho_d2), a3 = ajusteNota(cfg,r.cocho_d3);
+    if(r.ajuste && a2 && a3 && Math.sign(r.ajuste)===Math.sign(a2) && Math.sign(a2)===Math.sign(a3))
+      probs.push({sev:"medio",titulo:"Três leituras seguidas pedindo "+(r.ajuste>0?"aumento":"redução"),texto:`Notas ${fmt(r.cocho_d3,1)} → ${fmt(r.cocho_d2,1)} → ${fmt(r.cocho_d1,1)}. O trato pode não estar acompanhando a demanda.`,curto:"ajuste persistente"});
+    if(probs.length) r.checks.push(...probs);
+    else r.checks.push({sev:"ok",titulo:"Escore de cocho coerente",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) compatível com a variação do consumo (${pct(r.dOntem)}), com a curva e com as demais baias.`});
+  });
+
+  rows.forEach(r=>{
+    r.sev = r.checks.reduce((m,c)=>SEV[c.sev]>SEV[m]?c.sev:m,"ok");
+    r.alertas = r.checks.filter(c=>c.sev!=="ok");
+  });
+  return rows;
+}
+
+/* ---------- estado e navegação ---------- */
+const S = { user:null, farm:null, data:null, tab:"painel", sort:{k:"sev",dir:-1}, rows:[] };
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const dateKey = d=>{const [a,b,c]=d.split("/");return c+b+a;};
+
+$("#loginForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const senha = $("#pwd").value.trim();
+  if(!senha) return;
+  $("#btnEntrar").disabled = true; $("#loginErr").textContent = "Entrando…";
+  try{
+    const r = await rpc("entrar", {p_senha: senha});
+    $("#pwd").value = ""; $("#loginErr").textContent = "";
+    LS.set("sessao", r);
+    iniciar(r);
+  }catch(err){ $("#loginErr").textContent = err.message; }
+  finally{ $("#btnEntrar").disabled = false; }
+});
+$("#logout").onclick=async()=>{
+  const tok = S.sessao && S.sessao.token;
+  S.sessao=null; S.user=null; LS.del("sessao"); await IDB.limpar();
+  for(const k in DATA) delete DATA[k];
+  $("#app").classList.add("hidden"); $("#login").classList.remove("hidden");
+  if(tok) rpc("sair",{p_token:tok}).catch(()=>{});
+};
+$("#farmSel").onchange=e=>setFarm(e.target.value);
+$("#dateSel").onchange=e=>{ S.data=e.target.value; refresh(); };
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+
+function iniciar(sessao){
+  S.sessao = sessao; S.user = {admin: sessao.papel==="adm"};
+  $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
+  document.querySelectorAll(".adm-only").forEach(el=>el.classList.toggle("hidden",!S.user.admin));
+  const fz = sessao.fazendas || [];
+  $("#farmSel").classList.toggle("hidden", !S.user.admin || fz.length<2);
+  $("#farmSel").innerHTML = fz.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+  const ultima = LS.get("ultimaFazenda");
+  setTab("painel");
+  if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
+  else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
+}
+
+let syncMsg = {quando:null, off:false, erro:null, carregando:false};
+function renderSync(){
+  const s = syncMsg, srv = SRV[S.farm];
+  const quando = srv && srv.gerado_em ? new Date(srv.gerado_em) : null;
+  $("#sync").innerHTML =
+    (s.carregando ? esc(s.texto || "Atualizando…") : quando ? "Dados atualizados em " + quando.toLocaleDateString("pt-BR") + " às " + quando.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "Ainda sem dados neste aparelho") +
+    (s.off ? ' <span class="off">offline</span>' : "") + (s.erro ? ' <span class="off">'+esc(s.erro)+'</span>' : "") +
+    (s.info && !s.carregando ? ' · <b>'+esc(s.info)+'</b>' : "") +
+    (s.carregando || buscando ? "" : ' · <button id="btnSync" title="Pede ao robô para conferir o e-mail agora">Atualizar</button>');
+  const b = $("#btnSync"); if(b) b.onclick = atualizarAgora;
+}
+
+/* Botão Atualizar: pede ao robô para conferir o e-mail agora e espera o resultado */
+let buscando = false;
+const esperar = ms => new Promise(r=>setTimeout(r, ms));
+async function atualizarAgora(){
+  if(buscando || !S.sessao) return;
+  buscando = true;
+  const fid = S.farm;
+  const antes = Object.keys((DATA[fid]||{relatorios:{}}).relatorios).length;
+  const ultimoAntes = ultimoProcessado(fid);
+  const passo = (CFG.intervalo || 15000), limite = (CFG.limite || 240000);
+  try{
+    syncMsg = {carregando:true, texto:"Pedindo ao robô para conferir o e-mail…"}; renderSync();
+    let ped;
+    try{ ped = await rpc("pedir_coleta", {p_token:S.sessao.token}); }
+    catch(err){
+      if(err.cod==="sessao") return alertaSessao();
+      if(err.cod!=="nao_configurado") throw err;
+      await sincronizar(fid); if(S.farm===fid) mostrarFazenda();     // sem botão configurado: só baixa do banco
+      syncMsg = {info: err.message}; return;
+    }
+    const t0 = new Date(ped.pedido_em).getTime(), inicio = Date.now();
+    let terminou = false;
+    while(Date.now() - inicio < limite){
+      const seg = Math.round((Date.now()-inicio)/1000);
+      syncMsg = {carregando:true, texto:`Robô conferindo o e-mail… (${seg}s, leva de 1 a 3 min)`}; renderSync();
+      await esperar(passo);
+      const st = await rpc("situacao_pedido", {p_token:S.sessao.token});
+      if(st.github_status && st.github_status >= 300) throw new ErroAPI("Não consegui acionar o robô (GitHub " + st.github_status + "). Avise o administrador.", "github");
+      if(st.ultima_rodada && new Date(st.ultima_rodada).getTime() > t0){ terminou = true; break; }
+    }
+    await sincronizar(fid);
+    if(S.farm===fid) mostrarFazenda();
+    const depois = Object.keys((DATA[fid]||{relatorios:{}}).relatorios).length;
+    const ultimoDepois = ultimoProcessado(fid);
+    if(!terminou) syncMsg = {info:"O robô ainda não terminou. Tente Atualizar de novo em alguns minutos."};
+    else if(depois > antes || ultimoDepois > ultimoAntes) syncMsg = {info:"Relatório novo recebido ✓"};
+    else syncMsg = {info:"Nenhum relatório novo no e-mail."};
+  }catch(err){
+    if(err.cod==="sessao") return alertaSessao();
+    syncMsg = {off: err.cod==="offline", erro: err.cod==="offline" ? "sem internet para buscar" : err.message};
+  }finally{
+    buscando = false; renderSync();
+  }
+}
+function ultimoProcessado(fid){
+  return ((SRV[fid] && SRV[fid].relatorios) || []).reduce((m,r)=>r.processado_em && r.processado_em>m ? r.processado_em : m, "");
+}
+function mostrarVazio(msg){
+  $("#vazio").textContent = msg; $("#vazio").classList.remove("hidden");
+  document.querySelectorAll(".tabc").forEach(el=>el.classList.add("hidden-vazio"));
+  $("#tab-painel").classList.add("hidden"); $("#tab-baias").classList.add("hidden");
+}
+
+async function setFarm(id, soRede){
+  S.farm=id; $("#farmSel").value=id; LS.set("ultimaFazenda", id);
+  const nomeSessao = ((S.sessao.fazendas||[]).find(f=>f.id===id)||{}).nome || id;
+  $("#brand").firstChild.textContent = nomeSessao;
+  // 1) mostra na hora o que já está guardado no aparelho (funciona offline)
+  if(!soRede){ const c = await IDB.get("dados:"+id); if(c){ montar(id, c); mostrarFazenda(); } }
+  // 2) busca novidades no banco
+  syncMsg = {carregando:true}; renderSync();
+  if(!DATA[id]) { $("#vazio").textContent="Carregando dados…"; $("#vazio").classList.remove("hidden"); }
+  try{
+    await sincronizar(id);
+    syncMsg = {off:false};
+    if(S.farm===id) mostrarFazenda();
+  }catch(err){
+    syncMsg = {off: err.cod==="offline", erro: err.cod==="offline" ? null : err.message};
+    if(err.cod==="sessao"){ alertaSessao(); return; }
+    if(!DATA[id]) mostrarVazio(err.cod==="offline" ? "Sem internet e sem dados guardados neste aparelho. Conecte-se uma vez para baixar os dados." : err.message);
+  }
+  renderSync();
+}
+function alertaSessao(){
+  LS.del("sessao"); S.sessao=null;
+  $("#app").classList.add("hidden"); $("#login").classList.remove("hidden");
+  $("#loginErr").textContent = "Sua sessão expirou. Entre de novo.";
+}
+function mostrarFazenda(){
+  const id = S.farm, f = DATA[id];
+  $("#brand").firstChild.textContent = f.nome;
+  const datas = Object.keys(f.relatorios).sort((a,b)=>dateKey(b).localeCompare(dateKey(a)));
+  renderSync();
+  if(!datas.length){ mostrarVazio("Nenhum relatório recebido ainda para esta fazenda. Assim que o primeiro PDF chegar no e-mail, ele aparece aqui."); $("#dateSel").innerHTML=""; if(S.tab==="adm") renderAdm(); return; }
+  $("#vazio").classList.add("hidden");
+  if(S.tab!=="adm") $("#tab-"+S.tab).classList.remove("hidden");
+  const atual = $("#dateSel").value;
+  $("#dateSel").innerHTML = datas.map(d=>`<option>${d}</option>`).join("");
+  // mantém a data escolhida, mas se a pessoa estava no relatório mais recente e chegou um novo, pula para o novo
+  const mantem = datas.includes(atual) && S.dataFarm===id && atual !== S.maisRecente;
+  S.data = mantem ? atual : datas[0]; S.dataFarm = id; S.maisRecente = datas[0];
+  $("#dateSel").value = S.data;
+  $("#avisoCfg").classList.toggle("hidden", !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
+  refresh();
+}
+function setTab(t){
+  S.tab=t;
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
+  const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
+  ["painel","baias","adm"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (x!=="adm" && semDados)));
+  $("#vazio").classList.toggle("hidden", t==="adm" || !semDados || !$("#vazio").textContent);
+  if(t==="adm") renderAdm();
+}
+function refresh(){
+  if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
+  S.rows = analisar(S.farm,S.data);
+  $("#brandSub").textContent = "Relatório de "+S.data+" · "+(S.user.admin?"Administrador":"Consulta");
+  renderPainel(); renderFiltros(); renderTabela();
+  if(S.tab==="adm") renderAdm();
+}
+
+/* ---------- painel ---------- */
+function painelRows(){
+  const sx=$("#pSexo").value, d=$("#pDieta").value;
+  return S.rows.filter(r=>(!sx||r.sexo===sx)&&(!d||r.racao===d));
+}
+function renderPainel(){
+  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort(), cur=$("#pDieta").value;
+  $("#pDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
+  const R=painelRows();
+  if(!R.length){ $("#kpis").innerHTML=`<div class="empty">Nenhuma baia com esses filtros.</div>`; $("#alerts").innerHTML=""; $("#chart").innerHTML=""; $("#chartLegend").innerHTML=""; return; }
+  const cab=R.reduce((s,r)=>s+r.cab,0);
+  const w=(k)=>R.reduce((s,r)=>s+r[k]*r.cab,0)/cab;
+  const msHoje=w("cons_dia_ms"), msOntem=w("ms_1d"), ms5=w("ms_5d");
+  const nAlto=R.filter(r=>r.sev==="alto").length, nMed=R.filter(r=>r.sev==="medio").length;
+  $("#kpis").innerHTML = `
+    <div class="kpi"><div class="l">Baias · cabeças</div><div class="v">${R.length} · ${cab.toLocaleString("pt-BR")}</div><div class="s">ativas no relatório</div></div>
+    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(msHoje)}</div><div class="s">${pct((msHoje-msOntem)/msOntem*100)} × ontem · ${pct((msHoje-ms5)/ms5*100)} × 5d</div></div>
+    <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(w("cons_dia_pv"))}%</div><div class="s">ponderada por cabeças</div></div>
+    <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nAlto+nMed}</div><div class="s"><span class="chip alto">${nAlto} alto</span> <span class="chip medio">${nMed} médio</span></div></div>`;
+  const list = R.filter(r=>r.alertas.length).sort((a,b)=>SEV[b.sev]-SEV[a.sev]||b.alertas.length-a.alertas.length);
+  $("#alerts").innerHTML = list.length ? list.map(r=>{
+    const top=[...r.alertas].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
+    return `<div class="alert ${r.sev}" data-cur="${esc(r.curral)}" role="button" tabindex="0">
+      <div class="cur">${esc(r.curral)}</div>
+      <div class="msg">${esc(top[0].titulo)}<small>${top.map(c=>esc(c.curto||c.titulo)).join(" · ")} · ${r.cab} cab · ${r.dias_conf} dias</small></div></div>`;
+  }).join("") : `<div class="empty">Nenhum alerta para este dia. ✔</div>`;
+  document.querySelectorAll(".alert").forEach(el=>el.onclick=()=>openBaia(el.dataset.cur));
+  renderChart();
+}
+
+["#pSexo","#pDieta"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,renderPainel)));
+function renderChart(){
+  const R=painelRows(), cfg=getConfig(S.farm);
+  const fs=[$("#pSexo").value,$("#pDieta").value].filter(Boolean);
+  $("#chartFiltro").textContent = fs.length ? "· "+fs.join(" · ")+" ("+R.length+" baias)" : "· todas as baias ("+R.length+")";
+  const W=Math.max(340,Math.min(1000,($('#chart').clientWidth||760))),H=W<600?260:300,m={l:40,r:12,t:14,b:36};
+  const maxD=Math.max(...R.map(r=>r.dias_conf))+10, minD=0;
+  const pvs=R.map(r=>r.cons_dia_pv).concat(R.map(r=>r.pvEsp||0).filter(Boolean));
+  const lo=Math.floor((Math.min(...pvs)-0.2)*5)/5, hi=Math.ceil((Math.max(...pvs)+0.2)*5)/5;
+  const x=d=>m.l+(d-minD)/(maxD-minD)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  let g="";
+  for(let v=lo; v<=hi+1e-9; v+=0.2){ g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+  const step = (maxD>150?30:maxD>60?15:10)*(W<600?2:1);
+  for(let d=0; d<=maxD; d+=step){ g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`; }
+  g+=`<text x="${(W+m.l)/2}" y="${H-4}" text-anchor="middle" font-size="11" fill="var(--ink2)">dias de confinamento</text>`;
+  // curva(s) esperada(s) — macho tracejado escuro, fêmea tracejado claro
+  const sexos=[...new Set(R.map(r=>r.sexo).filter(Boolean))];
+  sexos.forEach((sx,i)=>{
+    const fx=cfg.curva.filter(c=>c.sexo===sx).sort((a,b)=>a.diaIni-b.diaIni);
+    let p=""; fx.forEach(c=>{ const a=Math.max(c.diaIni,minD), b=Math.min(c.diaFim,maxD); if(a>maxD) return; p+=`M${x(a)},${y(c.pv)}H${x(b)}`; });
+    g+=`<path d="${p}" fill="none" stroke="${i?"var(--muted)":"var(--ink2)"}" stroke-width="2" stroke-dasharray="${i?"2 4":"6 4"}"/>`;
+  });
+  R.forEach(r=>{
+    const col = r.sev==="alto"?"var(--crit)":r.sev==="medio"?"var(--warn)":"var(--accent)";
+    g+=`<circle cx="${x(r.dias_conf)}" cy="${y(r.cons_dia_pv)}" r="5" fill="${col}" stroke="var(--card)" stroke-width="2" data-cur="${esc(r.curral)}" style="cursor:pointer"/>`;
+  });
+  $("#chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="IMS %PV de cada baia por dias de confinamento, com a curva esperada">${g}</svg><div class="tip" id="tip"></div>`;
+  $("#chartLegend").innerHTML = `<span><i style="background:var(--accent)"></i>baia sem alerta</span><span><i style="background:var(--warn)"></i>alerta médio</span><span><i style="background:var(--crit)"></i>alerta alto</span>`+
+    sexos.map((s,i)=>`<span><i class="line" style="background:${i?"var(--muted)":"var(--ink2)"}"></i>curva esperada – ${s.toLowerCase()}</span>`).join("");
+  const tip=$("#tip");
+  $("#chart").querySelectorAll("circle").forEach(c=>{
+    const r=R.find(o=>o.curral===c.dataset.cur);
+    c.onmouseenter=()=>{ const b=$("#chart").getBoundingClientRect(), cb=c.getBoundingClientRect();
+      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias · ${fmt(r.cons_dia_pv)}% PV${r.pvEsp?` (esp. ${fmt(r.pvEsp)}%)`:""}`;
+      tip.style.left=(cb.left-b.left+cb.width/2)+"px"; tip.style.top=(cb.top-b.top)+"px"; tip.style.opacity=1; };
+    c.onmouseleave=()=>tip.style.opacity=0;
+    c.onclick=()=>openBaia(r.curral);
+  });
+}
+
+/* ---------- tabela de baias ---------- */
+function renderFiltros(){
+  const dietas=[...new Set(S.rows.map(r=>r.racao))].sort();
+  const cur=$("#fDieta").value;
+  $("#fDieta").innerHTML=`<option value="">Todas as dietas</option>`+dietas.map(d=>`<option ${d===cur?"selected":""}>${esc(d)}</option>`).join("");
+}
+["#fBusca","#fDieta","#fStatus"].forEach(s=>["input","change"].forEach(ev=>$(s).addEventListener(ev,renderTabela)));
+const COLS=[
+  {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias"},{k:"racao",t:"Dieta",l:1},
+  {k:"cons_dia_ms",t:"MS hoje"},{k:"dOntem",t:"Δ ontem"},{k:"d5",t:"Δ 5d"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},{k:"cocho_d1",t:"Cocho D-1/D-2/D-3"}
+];
+function renderTabela(){
+  const q=$("#fBusca").value.trim().toLowerCase(), dieta=$("#fDieta").value, st=$("#fStatus").value;
+  let R=S.rows.filter(r=>(!q||r.curral.toLowerCase().includes(q))&&(!dieta||r.racao===dieta)&&
+    (!st|| (st==="alto"&&r.sev==="alto") || (st==="medio"&&r.sev!=="ok") || (st==="ok"&&r.sev==="ok")));
+  const {k,dir}=S.sort;
+  R.sort((a,b)=>{ let va=k==="sev"?SEV[a.sev]:a[k], vb=k==="sev"?SEV[b.sev]:b[k];
+    if(va==null) return 1; if(vb==null) return -1;
+    return (typeof va==="string"? va.localeCompare(vb,"pt-BR",{numeric:true}) : va-vb)*dir; });
+  const cls=v=>v==null?"":v<0?"down":v>0?"up":"";
+  const lbl={ok:"OK",medio:"Atenção",alto:"Alerta"};
+  $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${c.k}">${c.t}${k===c.k?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
+    R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${lbl[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
+      <td>${r.cab}</td><td>${r.dias_conf}</td><td class="l">${esc(r.racao)}</td><td>${fmt(r.cons_dia_ms)}</td>
+      <td class="${cls(r.dOntem)}">${pct(r.dOntem)}</td><td class="${cls(r.d5)}">${pct(r.d5)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
+      <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td>${fmt(r.cocho_d1,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d3,1)}</td></tr>`).join("")+
+    (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
+  $("#tbl").querySelectorAll("th").forEach(th=>th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(); });
+  $("#tbl").querySelectorAll("tbody tr[data-cur]").forEach(tr=>tr.onclick=()=>openBaia(tr.dataset.cur));
+}
+
+/* ---------- detalhe da baia ---------- */
+function openBaia(cur){
+  const r=S.rows.find(o=>o.curral===cur); if(!r) return;
+  const mini=(l,v)=>`<div class="mini"><div class="l">${l}</div><div class="v">${v}</div></div>`;
+  const ico={ok:"✓",medio:"!",alto:"!"};
+  const ord=[...r.checks].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
+  $("#sheet").innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+      <div><h2>Curral ${esc(r.curral)}</h2><div style="color:var(--ink2);font-size:13px">Lote ${r.lote} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(getConfig(S.farm).catInfo[r.ct]?", "+esc(getConfig(S.farm).catInfo[r.ct]):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate)}</div></div>
+      <button class="btn ghost small" id="closeM">Fechar</button>
+    </div>
+    <h3>Consumo de MS (kg/cab)</h3>
+    <div class="grid2">${mini("Hoje",fmt(r.cons_dia_ms))}${mini("Ontem (D-1)",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("Média 5 dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Média desde a entrada",fmt(r.ms_med))}</div>
+    <h3>IMS (%PV)</h3>
+    <div class="grid2">${mini("Hoje",fmt(r.cons_dia_pv)+"%")}${mini("Esperado (curva)",r.pvEsp==null?"–":fmt(r.pvEsp)+"% <small>"+pp(r.dCurva)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta",esc(r.racao)+" <small>("+r.racao_dias+" d)</small>")}</div>
+    <h3>Curva de consumo da baia</h3>
+    <div class="seg" id="segM"><button data-m="ms" class="on">kg MS/cab</button><button data-m="pv">%PV</button></div>
+    <div class="chart" id="bChart"></div>
+    <div class="legend" id="bLegend"></div>
+    <div class="note" id="bNote"></div>
+    <h3>Leitura de cocho</h3>
+    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>D-1 (ontem)</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+    <h3>Verificações</h3>
+    <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${ico[c.sev]}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
+  $("#modal").classList.remove("hidden");
+  $("#closeM").onclick=closeModal;
+  let modo="ms";
+  const draw=()=>renderBaiaChart(r,modo);
+  document.querySelectorAll("#segM button").forEach(b=>b.onclick=()=>{ modo=b.dataset.m; document.querySelectorAll("#segM button").forEach(x=>x.classList.toggle("on",x===b)); draw(); });
+  requestAnimationFrame(draw);
+}
+function closeModal(){ $("#modal").classList.add("hidden"); }
+$("#modal").addEventListener("click",e=>{ if(e.target.id==="modal") closeModal(); });
+let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(S.user&&S.tab==="painel") renderChart(); },150); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeModal(); });
+
+/* ---------- histórico por baia ---------- */
+const parseD=s=>{const [d,m,y]=s.split("/").map(Number);return new Date(y<100?2000+y:y,m-1,d);};
+const addDays=(dt,n)=>{const x=new Date(dt);x.setDate(x.getDate()+n);return x;};
+const fmtD=dt=>dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});
+const SIMULAR=false; // histórico vem só dos relatórios reais
+
+function historico(farmId, r){
+  const rel=DATA[farmId].relatorios, pts={};
+  Object.keys(rel).sort((a,b)=>dateKey(a).localeCompare(dateKey(b))).forEach(d=>{
+    const x=rel[d].find(o=>o.lote===r.lote && o.curral===r.curral) || rel[d].find(o=>o.lote===r.lote);
+    if(!x) return;
+    const dt=parseD(d);
+    pts[dt.getTime()]={dt,dias:x.dias_conf,ms:x.cons_dia_ms,pv:x.cons_dia_pv,racao:x.racao,peso:x.peso_atual_prj,src:"rel"};
+    const on=addDays(dt,-1);
+    if(!pts[on.getTime()]) pts[on.getTime()]={dt:on,dias:x.dias_conf-1,ms:x.ms_1d,pv:x.ims_pv_1d,racao:x.racao,src:"rel"};
+  });
+  let arr=Object.values(pts).sort((a,b)=>a.dt-b.dt);
+  if(SIMULAR && arr.length && arr[0].dias>1){
+    // dias anteriores simulados, coerentes com o consumo atual, a média de 5 dias e a data de início da ração atual
+    const f=arr[0], tNow=f.dias, seedBase=r.lote;
+    let seed=seedBase; const rnd=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+    const shape=t=>0.62+0.38*(1-Math.exp(-t/14));
+    const inicioRacao = tNow+1 - r.racao_dias; // dia de confinamento em que começou a ração atual
+    const sim=[];
+    for(let t=1;t<tNow;t++){
+      const peso=r.peso_entrada+(r.peso_atual_prj-r.peso_entrada)*(t/(r.dias_conf||tNow));
+      const pv=f.pv*shape(t)/shape(tNow)*(1+(rnd()-0.5)*0.05);
+      sim.push({dt:addDays(f.dt,t-tNow),dias:t,pv:+pv.toFixed(2),ms:+(pv*peso/100).toFixed(2),
+        racao: t<inicioRacao ? "Dieta anterior" : r.racao, src:"sim"});
+    }
+    arr=sim.concat(arr);
+  }
+  return arr;
+}
+function trocasDeDieta(h){
+  const out=[]; for(let i=1;i<h.length;i++) if(h[i].racao!==h[i-1].racao) out.push({i,de:h[i-1].racao,para:h[i].racao,p:h[i]});
+  return out;
+}
+function renderBaiaChart(r,modo){
+  const box=$("#bChart"); if(!box) return;
+  const h=historico(S.farm,r), cfg=getConfig(S.farm), tr=trocasDeDieta(h);
+  const key=modo==="pv"?"pv":"ms";
+  const W=Math.max(300,box.clientWidth||560),H=220,m={l:38,r:10,t:22,b:30};
+  const dmin=h[0].dias, dmax=h[h.length-1].dias;
+  let vals=h.map(p=>p[key]);
+  const espPts=[];
+  if(modo==="pv" && r.sexo){
+    for(let d=dmin; d<=dmax; d++){ const e=esperado(cfg,{...r,dias_conf:d}); if(e.pv!=null) espPts.push({d,v:e.pv}); }
+    vals=vals.concat(espPts.map(p=>p.v));
+  }
+  let lo=Math.min(...vals), hi=Math.max(...vals), pad=(hi-lo)*0.12||0.5; lo-=pad; hi+=pad;
+  const x=d=>m.l+(d-dmin)/Math.max(1,dmax-dmin)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+  let g="";
+  for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+  const step=Math.max(5,Math.ceil((dmax-dmin)/6/5)*5);
+  for(let d=Math.ceil(dmin/step)*step; d<=dmax; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+15}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
+  g+=`<text x="${(W+m.l)/2}" y="${H-3}" text-anchor="middle" font-size="11" fill="var(--ink2)">dias de confinamento</text>`;
+  // trocas de dieta
+  tr.forEach(t=>{ const xx=x(t.p.dias)-0.5*(x(1)-x(0));
+    g+=`<line x1="${xx}" x2="${xx}" y1="${m.t-6}" y2="${H-m.b}" stroke="var(--serious)" stroke-width="1.5" stroke-dasharray="3 3"/>
+        <text x="${Math.min(xx+4,W-m.r-4)}" y="${m.t-8}" font-size="11" fill="var(--ink)" text-anchor="${xx>W-120?"end":"start"}">▼ troca de dieta · ${fmtD(t.p.dt)}</text>`; });
+  // curva esperada
+  if(espPts.length){ let p=""; espPts.forEach((q,i)=>p+=(i?"L":"M")+x(q.d)+","+y(q.v)); g+=`<path d="${p}" fill="none" stroke="var(--ink2)" stroke-width="1.5" stroke-dasharray="6 4"/>`; }
+  // consumo: simulado tracejado, real contínuo
+  const path=pts=>pts.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p[key])).join("");
+  const sim=h.filter(p=>p.src==="sim"), real=h.filter(p=>p.src==="rel");
+  if(sim.length) g+=`<path d="${path(sim.concat(real.slice(0,1)))}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="2 3" opacity=".7"/>`;
+  if(real.length) g+=`<path d="${path(real)}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+  real.forEach(p=>g+=`<circle cx="${x(p.dias)}" cy="${y(p[key])}" r="4.5" fill="var(--accent)" stroke="var(--card)" stroke-width="2"/>`);
+  g+=`<line id="bCross" x1="0" x2="0" y1="${m.t}" y2="${H-m.b}" stroke="var(--ink2)" opacity="0"/><rect x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent" id="bHit"/>`;
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Curva de consumo diário da baia">${g}</svg><div class="tip" id="bTip"></div>`;
+  $("#bLegend").innerHTML=`<span><i class="line" style="background:var(--accent)"></i>consumo dos relatórios</span>`+
+    (sim.length?`<span><i class="line" style="background:var(--accent);opacity:.5"></i>histórico simulado (protótipo)</span>`:"")+
+    (espPts.length?`<span><i class="line"></i>curva esperada</span>`:"")+
+    `<span><i class="line" style="background:var(--serious)"></i>troca de dieta</span>`;
+  $("#bNote").innerHTML = (tr.length? tr.map(t=>`Troca em ${fmtD(t.p.dt)} (dia ${t.p.dias}): ${esc(t.de)} → ${esc(t.para)}`).join("<br>") : "Sem troca de dieta no período.")+
+    (modo==="ms"?"":"") ;
+  const hit=$("#bHit"), tip=$("#bTip"), cross=$("#bCross"), svg=box.querySelector("svg");
+  hit.addEventListener("mousemove",ev=>{
+    const b=svg.getBoundingClientRect(), sx=(ev.clientX-b.left)*W/b.width;
+    const d=Math.round(dmin+(sx-m.l)/(W-m.l-m.r)*(dmax-dmin)); const p=h.find(q=>q.dias===d); if(!p) return;
+    cross.setAttribute("x1",x(d)); cross.setAttribute("x2",x(d)); cross.setAttribute("opacity",.5);
+    tip.innerHTML=`${fmtD(p.dt)} · dia ${p.dias}<br><b>${fmt(p[key])}${key==="pv"?"% PV":" kg MS"}</b>${p.src==="sim"?" (simulado)":""}<br>${esc(p.racao)}`;
+    tip.style.left=(x(d)*b.width/W)+"px"; tip.style.top=(y(p[key])*b.height/H)+"px"; tip.style.opacity=1;
+  });
+  hit.addEventListener("mouseleave",()=>{tip.style.opacity=0;cross.setAttribute("opacity",0);});
+}
+
+/* ---------- cadastros (ADM) ---------- */
+function renderAdm(){
+  if(!S.farm) return;
+  if(!S.user||!S.user.admin) return;
+  const cfg=JSON.parse(JSON.stringify(getConfig(S.farm)));
+  const el=$("#tab-adm");
+  const numIn=(v,step=0.01,w=80)=>`<input type="number" step="${step}" value="${v}" style="width:${w}px">`;
+  el.innerHTML=`
+  <div class="adm-section card"><h3 style="margin-top:0">Coleta automática</h3><div id="statusColeta" class="loading">Carregando situação da coleta…</div></div>
+  <p style="font-size:13px;color:var(--ink2)">Cadastros de <b>${esc((DATA[S.farm]||{}).nome||S.farm)}</b>. Cada confinamento tem os seus.${SRV[S.farm]&&SRV[S.farm].config_atualizado_em?" Último salvamento: "+new Date(SRV[S.farm].config_atualizado_em).toLocaleString("pt-BR")+".":" <b>Ainda com valores de exemplo.</b>"}</p>
+  <div class="adm-section card">
+    <h3 style="margin-top:0">Categorias (CT → sexo)</h3>
+    <p class="help">Siglas encontradas nos relatórios desta fazenda. O título da terceira coluna também é editável.</p>
+    <div class="tablewrap"><table class="edit" id="tCat"><thead><tr><th class="l">Sigla</th><th class="l">Sexo</th><th class="l" style="cursor:default"><input type="text" id="catTitulo" value="${esc(cfg.catInfoTitulo)}" aria-label="Título da coluna" style="min-width:180px;font-weight:600" title="Clique para renomear a coluna"></th></tr></thead><tbody>
+    ${Object.entries(cfg.categorias).map(([c,s])=>`<tr><td class="l"><b>${esc(c)}</b></td><td class="l"><select data-ct="${esc(c)}" style="min-width:104px"><option ${s==="Macho"?"selected":""}>Macho</option><option ${s==="Fêmea"?"selected":""}>Fêmea</option></select></td><td class="l"><input type="text" data-info="${esc(c)}" value="${esc(cfg.catInfo[c]||"")}" placeholder="ex.: Boi Nelore inteiro" style="min-width:220px"></td></tr>`).join("")}
+    </tbody></table></div>
+  </div>
+  <div class="adm-section card">
+    <h3 style="margin-top:0">Curva esperada (%PV)</h3>
+    <p class="help">Uma linha por sexo × faixa de peso de entrada × faixa de dias de confinamento.</p>
+    <div class="tablewrap"><table class="edit" id="tCurva"><thead><tr><th class="l">Sexo</th><th>Peso entr. de</th><th>até</th><th>Dia de</th><th>até</th><th>%PV</th><th></th></tr></thead><tbody>
+    ${cfg.curva.map(c=>curvaRow(c)).join("")}
+    </tbody></table></div>
+    <div class="row-actions"><button class="btn ghost small" id="addCurva">+ Linha</button></div>
+  </div>
+  <div class="adm-section card">
+    <h3 style="margin-top:0">Escore de cocho</h3>
+    <p class="help">Ajuste no trato (em % sobre o ofertado no dia anterior) que cada nota pede.</p>
+    <div class="tablewrap"><table class="edit" id="tEsc"><thead><tr><th class="l">Nota</th><th>Ajuste (%)</th><th></th></tr></thead><tbody>
+    ${cfg.escore.map(e=>escRow(e)).join("")}
+    </tbody></table></div>
+    <div class="row-actions"><button class="btn ghost small" id="addEsc">+ Nota</button></div>
+  </div>
+  <div class="adm-section card">
+    <h3 style="margin-top:0">Limites de alerta por dieta</h3>
+    <p class="help">Acima destes limites a baia entra em alerta. “Padrão” vale para dietas sem linha própria.</p>
+    <div class="tablewrap"><table class="edit" id="tLim"><thead><tr><th class="l">Dieta</th><th>× ontem (±%)</th><th>× média 5d (±%)</th><th>× curva (±p.p.)</th><th>Escore (±p.p.)</th></tr></thead><tbody>
+    ${Object.entries(cfg.limites).map(([d,l])=>`<tr data-d="${esc(d)}"><td class="l">${esc(d)}</td><td>${numIn(l.ontem,0.5)}</td><td>${numIn(l.cinco,0.5)}</td><td>${numIn(l.curva,0.05)}</td><td>${numIn(l.escore,0.5)}</td></tr>`).join("")}
+    </tbody></table></div>
+  </div>
+  <div class="row-actions">
+    <button class="btn" id="saveCfg">Salvar e recalcular</button>
+    <button class="btn ghost" id="resetCfg">Preencher com exemplos</button>
+    <span class="saved" id="savedMsg"></span>
+  </div>`;
+  const bindDel=()=>el.querySelectorAll(".del").forEach(b=>b.onclick=()=>b.closest("tr").remove());
+  bindDel();
+  $("#addCurva").onclick=()=>{ $("#tCurva tbody").insertAdjacentHTML("beforeend",curvaRow({sexo:"Macho",pesoMin:0,pesoMax:9999,diaIni:1,diaFim:20,pv:2})); bindDel(); };
+  $("#addEsc").onclick=()=>{ $("#tEsc tbody").insertAdjacentHTML("beforeend",escRow({nota:0,ajuste:0})); bindDel(); };
+  $("#saveCfg").onclick=()=>{
+    const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curva:[],escore:[],limites:{}};
+    el.querySelectorAll("#tCat select").forEach(s=>n.categorias[s.dataset.ct]=s.value);
+    el.querySelectorAll("#tCat input[data-info]").forEach(i=>{ if(i.value.trim()) n.catInfo[i.dataset.info]=i.value.trim(); });
+    el.querySelectorAll("#tCurva tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input,select");
+      n.curva.push({sexo:i[0].value,pesoMin:+i[1].value,pesoMax:+i[2].value,diaIni:+i[3].value,diaFim:+i[4].value,pv:+i[5].value}); });
+    el.querySelectorAll("#tEsc tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input"); n.escore.push({nota:+i[0].value,ajuste:+i[1].value}); });
+    n.escore.sort((a,b)=>a.nota-b.nota);
+    el.querySelectorAll("#tLim tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input");
+      n.limites[tr.dataset.d]={ontem:+i[0].value,cinco:+i[1].value,curva:+i[2].value,escore:+i[3].value}; });
+    $("#saveCfg").disabled=true; $("#savedMsg").textContent="Salvando…";
+    rpc("salvar_config",{p_token:S.sessao.token,p_fazenda:S.farm,p_dados:n}).then(async quando=>{
+      const c = await IDB.get("dados:"+S.farm) || {nome:(DATA[S.farm]||{}).nome, baias:[], relatorios:[]};
+      c.config = n; c.config_atualizado_em = quando; await IDB.set("dados:"+S.farm, c); montar(S.farm, c);
+      refresh(); renderAdm(); $("#savedMsg").textContent="Salvo para todos os usuários. Análises recalculadas.";
+    }).catch(err=>{
+      if(err.cod==="sessao") return alertaSessao();
+      $("#savedMsg").textContent = "Não salvou: " + err.message; $("#saveCfg").disabled=false;
+    });
+  };
+  $("#resetCfg").onclick=()=>{ const keep=SRV[S.farm]; SRV[S.farm]={...(keep||{}),config:null}; delete cfgCache[S.farm]; renderAdm(); SRV[S.farm]=keep; delete cfgCache[S.farm];
+    $("#savedMsg").textContent="Valores de exemplo preenchidos. Clique em Salvar para usar."; };
+  carregarStatusColeta();
+  async function carregarStatusColeta(){
+    const box = $("#statusColeta"); if(!box) return;
+    try{
+      const s = await rpc("status_coleta",{p_token:S.sessao.token});
+      const ult = s.ultimos_relatorios||[];
+      box.className="";
+      box.innerHTML = `<p style="font-size:13px;margin:0 0 8px">Última execução do robô: <b>${s.ultima_rodada?new Date(s.ultima_rodada).toLocaleString("pt-BR"):"ainda não rodou"}</b></p><div class="status-grid">${ult.map(u=>`<div class="st-row"><span><b>${esc(u.nome)}</b></span><span>${u.ultimo?"último relatório: "+isoParaBR(u.ultimo)+" · "+u.total+" no total":"nenhum relatório ainda"}</span></div>`).join("")}</div>
+        <h3>Últimos eventos do robô</h3>
+        <div class="log">${(s.log||[]).map(l=>`<div><b class="${esc(l.status)}">${esc(l.status)}</b> · ${new Date(l.quando).toLocaleString("pt-BR")} · ${esc(l.fazenda_id||"")} — ${esc(l.detalhe||"")}</div>`).join("") || "<div>Sem eventos ainda.</div>"}</div>`;
+    }catch(err){ if(err.cod==="sessao") return alertaSessao(); box.textContent = err.cod==="offline" ? "Sem internet para consultar a coleta." : err.message; }
+  }
+  function curvaRow(c){ return `<tr><td class="l"><select><option ${c.sexo==="Macho"?"selected":""}>Macho</option><option ${c.sexo==="Fêmea"?"selected":""}>Fêmea</option></select></td>
+    <td>${numIn(c.pesoMin,1,80)}</td><td>${numIn(c.pesoMax,1,80)}</td><td>${numIn(c.diaIni,1,64)}</td><td>${numIn(c.diaFim,1,64)}</td><td>${numIn(c.pv,0.01,74)}</td><td><button class="btn ghost small del" aria-label="Remover">✕</button></td></tr>`; }
+  function escRow(e){ return `<tr><td class="l">${numIn(e.nota,0.5,74)}</td><td>${numIn(e.ajuste,0.5,80)}</td><td><button class="btn ghost small del" aria-label="Remover">✕</button></td></tr>`; }
+}
+
+/* ---------- início ---------- */
+(function(){
+  const s = LS.get("sessao");
+  if(s && s.token) iniciar(s);
+  if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+  window.addEventListener("online", ()=>{ if(S.sessao && S.farm) setFarm(S.farm, true); });
+})();
+</script>
+</body>
+</html>
