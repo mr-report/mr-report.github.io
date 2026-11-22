@@ -65,7 +65,9 @@ header{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padd
 @media(max-width:600px){.brand{flex:1 0 100%}}
 .brand small{font-weight:400;color:rgba(255,255,255,.75);font-size:12px;white-space:nowrap}
 header select{width:auto;max-width:46vw;padding:6px 10px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:9px}
-header select option{color:#0d1b2e}
+header select option{color:#0d1b2e;font-size:15px;font-weight:400}
+.brand select{max-width:none;min-width:0;flex:0 1 auto;font-size:17px;font-weight:700;background:rgba(255,255,255,.08);border:1px solid rgba(204,209,1,.55);padding:4px 30px 4px 10px;-webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23CCD101' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;text-overflow:ellipsis;cursor:pointer}
 header .btn.ghost{color:#fff;border-color:rgba(255,255,255,.35)}
 .sync{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.8);max-width:1280px;margin:0 auto;padding:0 16px 6px}
 .sync .off{background:var(--warn-bg);color:#7a5600;border-radius:999px;padding:1px 8px;font-weight:600}
@@ -237,8 +239,7 @@ td.l,th.l{text-align:left}
 <section id="app" class="hidden">
   <header>
     <div class="bar">
-      <div class="brand" id="brand"><span id="brandNome">–</span><small id="brandSub"></small></div>
-      <select id="farmSel" class="hidden" aria-label="Confinamento"></select>
+      <div class="brand" id="brand"><span id="brandNome">–</span><select id="farmSel" class="hidden" aria-label="Trocar de fazenda" title="Trocar de fazenda"></select><small id="brandSub"></small></div>
       <select id="dateSel" aria-label="Data do relatório"></select>
       <button class="btn ghost small" id="logout">Sair</button>
     </div>
@@ -247,6 +248,7 @@ td.l,th.l{text-align:left}
       <button data-tab="vistoria">Vistoria</button>
       <button data-tab="analise">Análise</button>
       <button data-tab="adm" class="adm-only hidden">Cadastros</button>
+      <button data-tab="comparativo" class="adm-only hidden">Comparativo</button>
       <button data-tab="fazendas" class="adm-only hidden">Fazendas</button>
     </nav>
   </header>
@@ -289,6 +291,7 @@ td.l,th.l{text-align:left}
       </div>
     </div>
     <div id="tab-adm" class="hidden"></div>
+    <div id="tab-comparativo" class="hidden"></div>
     <div id="tab-fazendas" class="hidden"></div>
   </main>
 </section>
@@ -547,14 +550,31 @@ function iniciar(sessao){
   $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
   document.querySelectorAll(".adm-only").forEach(el=>el.classList.toggle("hidden",!S.user.admin));
   const fz = sessao.fazendas || [];
-  $("#farmSel").classList.toggle("hidden", !S.user.admin || fz.length<2);
-  $("#farmSel").innerHTML = fz.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+  preencherSeletor(fz);
   const ultima = LS.get("ultimaFazenda");
   const abaSalva = LS.get("aba");
   setTab(["vistoria","analise"].includes(abaSalva) ? abaSalva : (window.innerWidth < 900 ? "vistoria" : "analise"));
   if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
   else if(S.user.admin){ mostrarVazio("Nenhuma fazenda cadastrada ainda."); setTab("fazendas"); }
   else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
+  if(S.user.admin) atualizarFazendasAdm();
+}
+/* ADM: o seletor de fazenda fica no título; a lista vem sempre atualizada do banco */
+function preencherSeletor(fz){
+  const adm = S.user && S.user.admin;
+  $("#farmSel").innerHTML = fz.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
+  $("#farmSel").classList.toggle("hidden", !adm || !fz.length);
+  $("#brandNome").classList.toggle("hidden", !!(adm && fz.length));
+  if(S.farm && fz.some(f=>f.id===S.farm)) $("#farmSel").value = S.farm;
+}
+async function atualizarFazendasAdm(){
+  try{
+    const lista = await rpc("adm_listar_fazendas", {p_token:S.sessao.token});
+    const ativas = lista.filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}));
+    S.sessao.fazendas = ativas; LS.set("sessao", S.sessao);
+    preencherSeletor(ativas);
+    if(ativas.length && !ativas.some(f=>f.id===S.farm)) setFarm(ativas[0].id);   // fazenda apagada ou desativada
+  }catch(e){ /* sem internet ou 04 não instalado: fica com a lista do login */ }
 }
 
 let syncMsg = {quando:null, off:false, erro:null, carregando:false};
@@ -664,18 +684,19 @@ function mostrarFazenda(){
   $("#avisoCfg").classList.toggle("hidden", !S.user.admin || !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
   refresh();
 }
-const abaAdm = t => t==="adm" || t==="fazendas";
+const abaAdm = t => t==="adm" || t==="fazendas" || t==="comparativo";
 function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["vistoria","analise","adm","fazendas"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
+  ["vistoria","analise","adm","fazendas","comparativo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
   $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
   if(!abaAdm(t)) LS.set("aba", t);
   if(t==="vistoria" && S.rows) renderVistoria();
   if(t==="analise" && S.rows) renderAnalise();
   if(t==="adm") renderAdm();
   if(t==="fazendas") renderFazendas();
+  if(t==="comparativo") renderComparativo();
 }
 function refresh(){
   if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
@@ -1125,6 +1146,92 @@ let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout((
   if(S.tab==="vistoria") renderVistoria(); },180); });
 
 
+/* =====================================================================
+   COMPARATIVO ENTRE FAZENDAS (ADM)
+   ===================================================================== */
+const FASES=[[1,20,"1–20"],[21,40,"21–40"],[41,60,"41–60"],[61,90,"61–90"],[91,120,"91–120"],[121,9999,"121+"]];
+let compCarregando=false;
+async function renderComparativo(){
+  const el=$("#tab-comparativo"); if(!S.user||!S.user.admin) return;
+  const fz=S.sessao.fazendas||[];
+  if(!fz.length){ el.innerHTML=`<div class="card empty">Nenhuma fazenda cadastrada.</div>`; return; }
+  el.innerHTML=`<div class="loading" id="compStatus">Carregando dados das fazendas…</div>`;
+  if(compCarregando) return; compCarregando=true;
+  const falhas=[];
+  for(const [i,f] of fz.entries()){
+    $("#compStatus") && ($("#compStatus").textContent=`Carregando ${f.nome} (${i+1} de ${fz.length})…`);
+    try{ if(!DATA[f.id] || f.id!==S.farm) await sincronizar(f.id); }
+    catch(e){ const c=await IDB.get("dados:"+f.id); if(c) montar(f.id,c); else falhas.push(f.nome); if(e.cod==="sessao"){ compCarregando=false; return alertaSessao(); } }
+  }
+  compCarregando=false;
+  if(S.tab!=="comparativo") return;
+  // resumo de cada fazenda no relatório mais recente
+  const linhas=fz.filter(f=>DATA[f.id]).map((f,i)=>{
+    const datas=Object.keys(DATA[f.id].relatorios).sort((a,b)=>dateKey(b).localeCompare(dateKey(a)));
+    if(!datas.length) return {f, cor:`var(${CORES[i%6]})`, vazio:true};
+    const R=analisar(f.id, datas[0]);
+    const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), ms1=media(R,"ms_1d"), ms5=media(R,"ms_5d");
+    const pv=media(R,"cons_dia_pv"), esp=media(R.filter(r=>r.pvEsp!=null),"pvEsp");
+    const fases=FASES.map(([a,b])=>{ const rs=R.filter(r=>r.dias_conf>=a&&r.dias_conf<=b); return rs.length?{pv:media(rs,"cons_dia_pv"),ms:media(rs,"cons_dia_ms"),n:rs.length,cab:rs.reduce((s,r)=>s+r.cab,0)}:null; });
+    // MS média diária (ponderada) nos últimos 30 relatórios
+    const serie=datas.slice(0,30).reverse().map(d=>{ const rs=DATA[f.id].relatorios[d]; const c=rs.reduce((s,r)=>s+r.cab,0);
+      return {d, ms: rs.reduce((s,r)=>s+r.cons_dia_ms*r.cab,0)/c, pv: rs.reduce((s,r)=>s+r.cons_dia_pv*r.cab,0)/c}; });
+    return {f, cor:`var(${CORES[i%6]})`, data:datas[0], n:R.length, cab, ms, mn:media(R,"cons_dia_mn"), pv, esp, dO:(ms-ms1)/ms1*100, d5:(ms-ms5)/ms5*100,
+      dias:media(R,"dias_conf"), alertas:R.filter(r=>r.sev!=="ok").length, altos:R.filter(r=>r.sev==="alto").length, fases, serie,
+      defasado: (Date.now()-parseD(datas[0]).getTime())/864e5 > 2 };
+  });
+  const ok=linhas.filter(l=>!l.vazio);
+  el.innerHTML=`
+    ${falhas.length?`<div class="proto">Sem internet para atualizar: ${falhas.map(esc).join(", ")}. Mostrando o que está guardado no aparelho.</div>`:""}
+    <div class="card" style="margin-bottom:12px">
+      <h3>Situação de cada fazenda <small>relatório mais recente · médias ponderadas por cabeças · clique na linha para abrir a fazenda</small></h3>
+      <div class="tablewrap" style="border:0"><table id="compTab"><thead><tr><th class="l">Fazenda</th><th>Relatório</th><th>Baias</th><th>Cabeças</th><th>Dias cocho</th><th>MN</th><th>MS</th><th>%PV</th><th>%PV esp.</th><th>Δ curva</th><th>Δ ontem</th><th>Δ 5d</th><th>Baias com alerta</th></tr></thead><tbody>
+      ${linhas.map(l=>l.vazio?`<tr data-f="${esc(l.f.id)}"><td class="l"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${l.cor};margin-right:6px"></i><b>${esc(l.f.nome)}</b></td><td colspan="12" class="l" style="color:var(--ink2)">nenhum relatório ainda</td></tr>`:
+        `<tr data-f="${esc(l.f.id)}"><td class="l"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${l.cor};margin-right:6px"></i><b>${esc(l.f.nome)}</b></td>
+        <td>${l.data}${l.defasado?` <span class="chip medio" title="sem relatório recente">atrasado</span>`:""}</td><td>${l.n}</td><td>${l.cab.toLocaleString("pt-BR")}</td><td>${fmt(l.dias,0)}</td>
+        <td>${fmt(l.mn)}</td><td><b>${fmt(l.ms)}</b></td><td>${fmt(l.pv)}</td><td>${fmt(l.esp)}</td><td class="${(l.pv-l.esp)<0?"down":"up"}">${l.esp!=null?pp(l.pv-l.esp):"–"}</td>
+        <td class="${l.dO<0?"down":"up"}">${pct(l.dO)}</td><td class="${l.d5<0?"down":"up"}">${pct(l.d5)}</td>
+        <td>${l.alertas?`<span class="chip ${l.altos?"alto":"medio"}">${l.alertas} de ${l.n} (${Math.round(l.alertas/l.n*100)}%)</span>`:`<span class="chip ok">nenhuma</span>`}</td></tr>`).join("")}
+      </tbody></table></div>
+    </div>
+    <div class="an-grid c2b">
+      <div class="card"><h3>%PV médio por fase <small>dias de cocho · mesma fase lado a lado</small></h3><div class="chart" id="compFases"></div><div class="legend" id="compFasesLeg"></div></div>
+      <div class="card"><h3>MS média ao longo dos dias <small>kg/cab · últimos 30 relatórios</small></h3><div class="chart" id="compSerie"></div><div class="legend" id="compSerieLeg"></div></div>
+    </div>
+    <p class="note">As fases agrupam as baias pelos dias de cocho, para comparar animais na mesma etapa. A curva esperada e os alertas usam os cadastros de cada fazenda.</p>`;
+  $("#compTab").querySelectorAll("tbody tr").forEach(tr=>tr.onclick=()=>{ setFarm(tr.dataset.f); setTab("analise"); });
+  if(!ok.length){ $("#compFases").innerHTML=`<div class="empty">Sem relatórios ainda.</div>`; return; }
+  const leg=ok.map(l=>`<span><i class="line" style="background:${l.cor}"></i>${esc(l.f.nome)}</span>`).join("");
+  $("#compFasesLeg").innerHTML=leg; $("#compSerieLeg").innerHTML=leg;
+  // barras agrupadas por fase
+  { const box=$("#compFases"), W=Math.max(320,box.clientWidth||560), H=260, m={l:38,r:8,t:12,b:30};
+    const fasesUsadas=FASES.map((f,i)=>i).filter(i=>ok.some(l=>l.fases[i]));
+    const vals=ok.flatMap(l=>fasesUsadas.map(i=>l.fases[i]&&l.fases[i].pv).filter(v=>v!=null));
+    const hi=Math.ceil((Math.max(...vals)+0.2)*5)/5, lo=0;
+    const y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b), gw=(W-m.l-m.r)/fasesUsadas.length, bw=Math.min(26,(gw-12)/ok.length);
+    let g=""; for(let v=0; v<=hi+1e-9; v+= hi>2?0.5:0.25) g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,v%1?2:0)}</text>`;
+    fasesUsadas.forEach((fi,k)=>{ const x0=m.l+k*gw+(gw-bw*ok.length-2*(ok.length-1))/2;
+      g+=`<text x="${m.l+k*gw+gw/2}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${FASES[fi][2]}</text>`;
+      ok.forEach((l,j)=>{ const f=l.fases[fi]; if(!f) return; const x=x0+j*(bw+2);
+        g+=`<rect x="${x}" y="${y(f.pv)}" width="${bw}" height="${y(0)-y(f.pv)}" rx="3" fill="${l.cor}"><title>${esc(l.f.nome)} · ${FASES[fi][2]} dias: ${fmt(f.pv)}% PV · ${fmt(f.ms)} kg MS · ${f.n} baias (${f.cab} cab)</title></rect>`; }); });
+    g+=`<text x="${W-m.r}" y="${H-2}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
+    box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="%PV médio por fase e por fazenda">${g}</svg>`; }
+  // linhas de MS média por dia
+  { const box=$("#compSerie"), W=Math.max(320,box.clientWidth||560), H=260, m={l:38,r:10,t:12,b:30};
+    const todas=[...new Set(ok.flatMap(l=>l.serie.map(p=>p.d)))].sort((a,b)=>dateKey(a).localeCompare(dateKey(b)));
+    if(todas.length<2){ box.innerHTML=`<div class="empty">O gráfico aparece a partir do 2º relatório.</div>`; }
+    else{
+      const vs=ok.flatMap(l=>l.serie.map(p=>p.ms)); let lo=Math.min(...vs), hi=Math.max(...vs), pad=(hi-lo)*.15||1; lo-=pad; hi+=pad;
+      const xi=d=>m.l+todas.indexOf(d)/(todas.length-1)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
+      let g=""; for(let i=0;i<=4;i++){ const v=lo+(hi-lo)*i/4; g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${m.l-5}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink2)">${fmt(v,1)}</text>`; }
+      const passo=Math.ceil(todas.length/6); todas.forEach((d,i)=>{ if(i%passo===0||i===todas.length-1) g+=`<text x="${xi(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d.slice(0,5)}</text>`; });
+      ok.forEach(l=>{ if(!l.serie.length) return; g+=`<path d="${l.serie.map((p,i)=>(i?"L":"M")+xi(p.d)+","+y(p.ms)).join("")}" fill="none" stroke="${l.cor}" stroke-width="2.2"/>`;
+        l.serie.forEach(p=>g+=`<circle cx="${xi(p.d)}" cy="${y(p.ms)}" r="3" fill="${l.cor}"><title>${esc(l.f.nome)} · ${p.d}: ${fmt(p.ms)} kg MS · ${fmt(p.pv)}% PV</title></circle>`); });
+      box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="MS média diária por fazenda">${g}</svg>`;
+    }
+  }
+}
+
 /* ---------- fazendas (ADM): cadastrar, editar, senhas ---------- */
 const ERROS_FAZ = {
   codigo_invalido: "Código inválido: use só letras minúsculas, números e hífen (ex.: santa-rita).",
@@ -1172,10 +1279,8 @@ async function renderFazendas(){
 function atualizarListaSessao(){
   const ativas = FZ_LISTA.filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}));
   S.sessao.fazendas = ativas; LS.set("sessao", S.sessao);
-  $("#farmSel").innerHTML = ativas.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
-  $("#farmSel").classList.toggle("hidden", ativas.length<2);
-  if(S.farm && ativas.some(f=>f.id===S.farm)) $("#farmSel").value = S.farm;
-  else if(ativas.length){ setFarm(ativas[0].id); }
+  preencherSeletor(ativas);
+  if(!(S.farm && ativas.some(f=>f.id===S.farm)) && ativas.length) setFarm(ativas[0].id);
 }
 function formFazenda(f){
   const nova = !f;
