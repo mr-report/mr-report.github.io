@@ -1,7 +1,7 @@
 // Guarda os arquivos do app no aparelho para abrir sem internet.
 // Os dados das fazendas ficam no IndexedDB (gerenciado pelo próprio app).
-const VERSAO = "mr-report-v6";
-const ARQUIVOS = ["./", "index.html", "config.js", "manifest.webmanifest", "icone.svg", "icone-192.png", "icone-512.png"];
+const VERSAO = "mr-report-v7";
+const ARQUIVOS = ["./", "index.html", "config.js", "manifest.webmanifest", "favicon.png", "logo-icone.png", "logo-texto.png", "logo-texto-claro.png", "icone-192.png", "icone-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
 });

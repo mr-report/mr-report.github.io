@@ -6,7 +6,7 @@
 <title>Mr. Report – Análise de Confinamento</title>
 <meta name="theme-color" content="#023577">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icone.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="icone-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <script src="config.js"></script>
@@ -38,12 +38,12 @@ button,input,select{font:inherit;color:inherit}
 /* ---------- login ---------- */
 #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--primary)}
 .login-box{background:var(--card);border-radius:18px;padding:30px 28px;width:100%;max-width:360px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.logo i{width:34px;height:34px;border-radius:9px;background:var(--primary);display:inline-flex;align-items:center;justify-content:center}
-.logo i:after{content:"";width:12px;height:12px;border-radius:50%;background:var(--secondary)}
+.logo{display:flex;flex-direction:column;align-items:center;gap:12px;margin:0 0 18px;text-align:center}
+.logo-ic{width:96px;height:96px;display:block}
+.logo-tx{width:220px;max-width:100%;height:auto;display:block}
 .login-box h1{font-size:24px;margin:0;color:var(--primary)}
 @media (prefers-color-scheme:dark){.login-box h1{color:var(--ink)}}
-.login-box p{color:var(--ink2);margin:0 0 18px;font-size:14px}
+.login-box p{color:var(--ink2);margin:0 0 18px;font-size:14px;text-align:center}
 .field{display:block;margin-bottom:12px}
 .field span{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
 input[type=password],input[type=text],input[type=number],input[type=search],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
@@ -60,7 +60,7 @@ input:focus,select:focus{outline:2px solid var(--secondary);outline-offset:1px}
 header{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padding-top:env(safe-area-inset-top)}
 .bar{display:flex;align-items:center;gap:8px;padding:10px 16px 6px;max-width:1280px;margin:0 auto;flex-wrap:wrap}
 .brand{font-weight:700;font-size:17px;margin-right:auto;display:flex;align-items:center;gap:8px;min-width:0}
-.brand:before{content:"";flex:0 0 10px;height:10px;border-radius:50%;background:var(--secondary)}
+.brand:before{content:"";flex:0 0 32px;height:32px;border-radius:8px;background:url("logo-icone.png") center/cover no-repeat}
 .brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:600px){.brand{flex:1 0 100%}}
 .brand small{font-weight:400;color:rgba(255,255,255,.75);font-size:12px;white-space:nowrap}
@@ -228,8 +228,11 @@ td.l,th.l{text-align:left}
 
 <section id="login">
   <form class="login-box" id="loginForm">
-    <div class="logo"><i></i><h1>Mr. Report</h1></div>
-    <p>Análise diária do confinamento. Entre com a senha da sua fazenda.</p>
+    <div class="logo">
+      <img src="logo-icone.png" alt="" class="logo-ic">
+      <picture><source srcset="logo-texto-claro.png" media="(prefers-color-scheme: dark)"><img src="logo-texto.png" alt="Mr. Report – Relatórios do rebanho" class="logo-tx"></picture>
+    </div>
+    <p>Entre com a senha da sua fazenda.</p>
     <label class="field"><span>Senha</span><input type="password" id="pwd" autocomplete="current-password" required></label>
     <button class="btn block" type="submit" id="btnEntrar">Entrar</button>
     <div class="err" id="loginErr"></div>
