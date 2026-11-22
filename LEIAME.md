@@ -46,7 +46,7 @@ para o administrador.
      porque a conexão "direta" não funciona no GitHub.
 
 ### 3. GitHub
-1. Crie o repositório **público** `Mr.Report`. Depois, no repositório, abra **Settings → Secrets and variables → Actions → New repository secret** e crie dois secrets:
+1. O repositório é **público**: `mr-report/mr-report.github.io`. Depois, no repositório, abra **Settings → Secrets and variables → Actions → New repository secret** e crie dois secrets:
    - `DATABASE_URL`: a URI do Session pooler, com a senha já colocada.
    - `FAZENDAS`: uma lista com o e-mail de cada fazenda, no formato abaixo.
      ```json
@@ -58,7 +58,7 @@ para o administrador.
 3. Edite `app/config.js` com a URL e a chave pública do passo 2.4. Essas duas podem ficar visíveis.
 4. Abra **Actions → Coleta diária → Run workflow**. Em "dias", use `120` para importar o histórico
    que já está no e-mail. Depois de cerca de 1 minuto, deve aparecer ✅.
-5. O app fica em `https://SEU-USUARIO.github.io/Mr.Report/`. No celular, abra o endereço e use
+5. O app fica em **https://mr-report.github.io** (organização `mr-report`, repositório `mr-report.github.io`). No celular, abra o endereço e use
    "Adicionar à tela de início".
 
 ### 4. Botão "Atualizar" (faz o robô conferir o e-mail na hora)
@@ -66,12 +66,12 @@ Serve para quando o relatório chega fora do horário. O banco precisa de uma ch
 pedir ao GitHub que rode o robô.
 1. No GitHub, abra sua foto → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
    - Nome: `mr-report-botao`. Em validade, escolha a mais longa disponível e anote a data para renovar.
-   - Em *Repository access*, escolha **Only select repositories → Mr.Report**.
+   - Em *Resource owner*, escolha a organização **mr-report**; em *Repository access*, **Only select repositories → mr-report.github.io**.
    - Em *Permissions → Repository permissions*, deixe **Actions: Read and write**. As outras ficam sem acesso.
    - Clique em **Generate token** e copie o token (começa com `github_pat_`).
 2. No Supabase (SQL Editor), rode `supabase/03_botao_atualizar.sql` inteiro.
 3. Ainda no SQL Editor, rode só as duas linhas de configuração do final desse arquivo, sem o `--` do começo,
-   com o seu usuário do GitHub e o token.
+   com o repositório `mr-report/mr-report.github.io` e o token.
    O token fica guardado criptografado no *Vault* do Supabase, nunca no app nem no repositório.
 4. No app, toque em **Atualizar**. O robô roda em 1 a 3 minutos, e o app avisa se chegou relatório novo.
    Para evitar excesso, o banco aceita no máximo um pedido a cada 3 minutos. Quem tocar nesse

@@ -78,6 +78,6 @@ grant execute on function public.situacao_pedido(text) to anon;
 -- (Para trocar o token depois: select vault.update_secret(
 --    (select id from vault.secrets where name = 'github_token'), 'NOVO_TOKEN');)
 -- =====================================================================
--- insert into public.parametros(chave, valor) values ('github_repo', 'TROQUE-PELO-USUARIO/Mr.Report')
+-- insert into public.parametros(chave, valor) values ('github_repo', 'mr-report/mr-report.github.io')
 --   on conflict (chave) do update set valor = excluded.valor;
 -- select vault.create_secret('TROQUE-PELO-TOKEN-DO-GITHUB', 'github_token');
