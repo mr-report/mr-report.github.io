@@ -1465,8 +1465,12 @@ function formFazenda(f){
     <div class="row-actions"><button class="btn" id="fzSalvar">Salvar</button><button class="btn ghost" id="fzCancelar">Cancelar</button><span class="saved" id="fzMsg"></span></div>
   </div>`;
   box.scrollIntoView({behavior:"smooth", block:"start"});
-  if(nova) $("#fzNome").addEventListener("input", ()=>{ if(!$("#fzId").dataset.mexeu) $("#fzId").value = slug($("#fzNome").value).replace(/^(fazenda|faz|confinamento|conf|sitio|estancia)-/,""); });
-  if(nova) $("#fzId").addEventListener("input", ()=>{ $("#fzId").dataset.mexeu = "1"; });
+  if(nova){
+    // o código acompanha o nome enquanto ninguém mexer nele; apagar o código volta a acompanhar
+    const gerar = ()=>{ if(!$("#fzId").dataset.mexeu) $("#fzId").value = slug($("#fzNome").value).replace(/^(fazenda|faz|confinamento|conf|sitio|estancia)-/,""); };
+    ["input","keyup","change","blur","paste","compositionend"].forEach(ev=>$("#fzNome").addEventListener(ev, ()=>setTimeout(gerar,0)));
+    $("#fzId").addEventListener("input", ()=>{ if($("#fzId").value.trim()) $("#fzId").dataset.mexeu = "1"; else { delete $("#fzId").dataset.mexeu; gerar(); } });
+  }
   $("#fzCancelar").onclick = ()=>{ box.innerHTML=""; };
   $("#fzSalvar").onclick = async ()=>{
     const msg = $("#fzMsg"); msg.style.color = "var(--crit)";
