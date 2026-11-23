@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import email
 import email.policy
+import email.utils
 import imaplib
 import json
 import os
@@ -163,7 +164,10 @@ def pdfs_do_email(f: dict, desde: date):
                 continue
             msg = email.message_from_bytes(msg_data[0][1], policy=email.policy.default)
             remetente = _texto(msg.get("From"))
-            if f.get("remetente") and f["remetente"].lower() not in remetente.lower():
+            endereco = email.utils.parseaddr(remetente)[1].lower()
+            filtro = (f.get("remetente") or "").strip().lower().lstrip("@")
+            # compara só o endereço (o nome que aparece no "De:" qualquer um escreve)
+            if filtro and not (endereco == filtro or endereco.endswith("@" + filtro) or endereco.endswith("." + filtro)):
                 continue
             mid = (msg.get("Message-ID") or f"uid-{uid.decode()}").strip()
             for parte in msg.walk():
@@ -211,7 +215,13 @@ def coletar(conn, fazendas: list[dict], dias: int) -> int:
                     n["ignorado"] += 1
                     log(conn, fid, "erro", f"falha ao ler '{nome}': {type(e).__name__}: {e}", ref=mid)
                     continue
-                r = gravar(conn, fid, meta, baias, nome, mid)
+                try:
+                    r = gravar(conn, fid, meta, baias, nome, mid)
+                except Exception as e:  # valor fora do formato do banco etc.: avisa uma vez e segue com os outros
+                    conn.rollback()
+                    n["ignorado"] += 1
+                    log(conn, fid, "erro", f"PDF '{nome}': não consegui gravar ({type(e).__name__}: {e})", ref=mid)
+                    continue
                 n[r] += 1
                 if r != "repetido":
                     log(conn, fid, "ok", f"relatório {NOMES[meta['sistema']]} de {meta['data_ref']} ({r}): {meta['n_baias']} baias, "
@@ -230,16 +240,27 @@ def processar_uploads(conn) -> int:
     """PDFs enviados pelo app (botão "Inserir relatório"). Devolve quantos foram processados."""
     try:
         with conn.cursor() as cur:
-            cur.execute("""select u.id, u.fazenda_id, u.nome, u.conteudo, f.sistema
+            # um arquivo que travou a leitura numa rodada anterior fica "lendo": vira erro e não é lido de novo
+            cur.execute("""update public.uploads set status='erro', conteudo=null, processado_em=now(),
+                             detalhe='a leitura deste arquivo não terminou (arquivo estranho ou grande demais)'
+                           where status='lendo' and quando < now() - interval '30 minutes'""")
+            cur.execute("""select u.id, u.fazenda_id, u.nome, f.sistema
                            from public.uploads u join public.fazendas f on f.id = u.fazenda_id
-                           where u.status = 'pendente' order by u.id""")
+                           where u.status = 'pendente' order by u.id limit 200""")
             pendentes = cur.fetchall()
+        conn.commit()
     except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
         conn.rollback()            # 05_varios_sistemas.sql ainda não instalado
         return 0
-    for uid, fid, nome, conteudo, sistema in pendentes:
+    for uid, fid, nome, sistema in pendentes:
         data_ref, status = None, "erro"
+        with conn.cursor() as cur:           # marca antes de ler: se travar, não volta a ser lido
+            cur.execute("update public.uploads set status='lendo' where id=%s returning conteudo", (uid,))
+            conteudo = cur.fetchone()[0]
+        conn.commit()
         try:
+            if conteudo is None:
+                raise RelatorioInvalido("arquivo vazio")
             meta, baias = ler(bytes(conteudo), sistema)
             r = gravar(conn, fid, meta, baias, nome, f"upload:{uid}")
             data_ref, status = meta["data_ref"], "ok"
@@ -249,9 +270,10 @@ def processar_uploads(conn) -> int:
         except (RelatorioInvalido, SistemaErrado) as e:
             detalhe = str(e)
         except Exception as e:
+            conn.rollback()
             detalhe = f"falha ao ler o arquivo: {type(e).__name__}: {e}"
         with conn.cursor() as cur:
-            cur.execute("update public.uploads set status=%s, detalhe=%s, data_ref=%s, processado_em=now() where id=%s",
+            cur.execute("update public.uploads set status=%s, detalhe=%s, data_ref=%s, processado_em=now(), conteudo=null where id=%s",
                         (status, detalhe[:2000], data_ref, uid))
         conn.commit()
         log(conn, fid, status, f"[enviado pelo app] '{nome}': {detalhe}")

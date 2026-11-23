@@ -7,6 +7,8 @@ Cada leitor devolve (meta, baias) no mesmo formato; meta sempre traz "sistema" e
 from __future__ import annotations
 
 import io
+import signal
+from datetime import date, timedelta
 
 import pdfplumber
 
@@ -41,7 +43,45 @@ def detectar(conteudo: bytes) -> str | None:
     return None
 
 
+MAX_BYTES = 15 * 1024 * 1024
+MAX_PAGINAS = 60
+MAX_SEGUNDOS = 90
+
+
+class _Demorou(Exception):
+    pass
+
+
+def _limite_tempo(signum, frame):
+    raise _Demorou()
+
+
 def ler(conteudo: bytes, sistema_esperado: str | None = None) -> tuple[dict, list[dict]]:
+    """Lê o PDF com limites de tamanho, páginas e tempo (um arquivo estranho não trava o robô)."""
+    if len(conteudo) > MAX_BYTES:
+        raise RelatorioInvalido("arquivo maior que 15 MB")
+    usa_alarme = hasattr(signal, "SIGALRM")
+    if usa_alarme:
+        anterior = signal.signal(signal.SIGALRM, _limite_tempo)
+        signal.alarm(MAX_SEGUNDOS)
+    try:
+        return _ler(conteudo, sistema_esperado)
+    except _Demorou:
+        raise RelatorioInvalido(f"a leitura passou de {MAX_SEGUNDOS} s – o arquivo não parece um relatório normal") from None
+    finally:
+        if usa_alarme:
+            signal.alarm(0)
+            signal.signal(signal.SIGALRM, anterior)
+
+
+def _ler(conteudo: bytes, sistema_esperado: str | None) -> tuple[dict, list[dict]]:
+    try:
+        with pdfplumber.open(io.BytesIO(conteudo)) as doc:
+            n = len(doc.pages)
+    except Exception:
+        raise RelatorioInvalido("não consegui abrir o PDF (arquivo corrompido ou protegido)") from None
+    if n == 0 or n > MAX_PAGINAS:
+        raise RelatorioInvalido(f"o PDF tem {n} páginas – um relatório diário tem até {MAX_PAGINAS}")
     sist = detectar(conteudo)
     if sist is None:
         raise RelatorioInvalido("não é um relatório reconhecido (TGC, Feed Manager ou FarmTell)")
@@ -58,6 +98,12 @@ def ler(conteudo: bytes, sistema_esperado: str | None = None) -> tuple[dict, lis
             meta, baias = leitor_farmtell.ler(conteudo)
     except (leitor_tgc.RelatorioInvalido, leitor_feedmanager.RelatorioInvalido, leitor_farmtell.RelatorioInvalido) as e:
         raise RelatorioInvalido(str(e)) from None
+    # data do relatório: não aceita datas no futuro nem muito antigas (arquivo errado ou adulterado)
+    dref = date.fromisoformat(meta["data_ref"])
+    if dref > date.today() + timedelta(days=2) or dref < date(2020, 1, 1):
+        raise RelatorioInvalido(f"data do relatório fora do esperado ({dref.strftime('%d/%m/%Y')})")
+    if len(baias) > 2000:
+        raise RelatorioInvalido("relatório com baias demais – não parece um relatório normal")
     for b in baias:                       # lote pode ter letras (Feed Manager): guarda sempre como texto
         b["lote"] = str(b["lote"]) if b.get("lote") is not None else None
     return meta, baias

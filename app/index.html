@@ -492,19 +492,23 @@ function analisar(farmId, data){
   });
   rows.forEach(r=>{
     const L = limitesDe(cfg, r.racao), Jr = r.janela || 5;
-    r.dOntem = r.ms_1d ? (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100 : null;
-    r.d5 = (r.cons_dia_ms - r.ms_5d)/r.ms_5d*100;
-    r.dOntemKg = r.ms_1d!=null ? r.cons_dia_ms - r.ms_1d : null;
-    r.d5Kg = r.ms_5d!=null ? r.cons_dia_ms - r.ms_5d : null;
+    // consumo do dia ausente: sem comparação (não é "-100%")
+    const temHoje = r.cons_dia_ms!=null;
+    r.dOntem = temHoje && r.ms_1d ? (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100 : null;
+    r.d5 = temHoje && r.ms_5d ? (r.cons_dia_ms - r.ms_5d)/r.ms_5d*100 : null;
+    r.dOntemKg = r.dOntem!=null ? r.cons_dia_ms - r.ms_1d : null;
+    r.d5Kg = r.d5!=null ? r.cons_dia_ms - r.ms_5d : null;
     r.temCocho = r.cocho_d1!=null;
     const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv;
-    r.dCurva = e.pv==null ? null : r.cons_dia_pv - e.pv;
+    r.dCurva = e.pv==null || r.cons_dia_pv==null ? null : r.cons_dia_pv - e.pv;
     r.ajuste = r.temCocho ? ajusteNota(cfg, r.cocho_d1) : null;
     r.checks = [];
     const add=(sev,titulo,texto,curto)=>r.checks.push({sev,titulo,texto,curto});
 
+    if(!temHoje) add("medio","Relatório sem o consumo do dia","Esta baia veio sem consumo de hoje no relatório. Conferir o trato ou o relatório.","sem consumo do dia");
     // 1. variação x ontem
-    if(r.dOntem==null)
+    if(!temHoje) {}
+    else if(r.dOntem==null)
       add("ok","Sem consumo de ontem para comparar","O relatório não traz o consumo de ontem e não há relatório do dia anterior guardado. A comparação aparece a partir do próximo relatório.");
     else if(Math.abs(r.dOntem) > L.ontem)
       add(Math.abs(r.dOntem)>L.ontem*2?"alto":"medio","Consumo "+(r.dOntem<0?"caiu":"subiu")+" em relação a ontem",
@@ -512,18 +516,20 @@ function analisar(farmId, data){
     else add("ok","Variação em relação a ontem dentro do limite",`${pct(r.dOntem)} (limite ±${L.ontem}%).`);
 
     // 2. variação x média curta (5 dias no TGC, 3 no Feed Manager)
-    if(r.d5==null || isNaN(r.d5)) add("ok",`Sem média de ${Jr} dias no relatório`,"Não foi possível comparar.");
+    if(!temHoje) {}
+    else if(r.d5==null || isNaN(r.d5)) add("ok",`Sem média de ${Jr} dias no relatório`,"Não foi possível comparar.");
     else if(Math.abs(r.d5) > L.cinco)
       add(r.d5 < -L.cinco*1.5?"alto":"medio","Consumo "+(r.d5<0?"abaixo":"acima")+` da média dos últimos ${Jr} dias`,
         `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_5d)} na média de ${Jr} dias (${pct(r.d5)}). Limite: ±${L.cinco}%.`, `${pct(r.d5)} × média ${Jr}d`);
     else add("ok",`Variação em relação à média de ${Jr} dias dentro do limite`,`${pct(r.d5)} (limite ±${L.cinco}%).`);
 
     // 3. dentro do esperado (curva)
-    if(r.pvEsp==null)
-      add("medio","Sem curva cadastrada para esta baia",`Categoria "${r.ct}"${r.sexo?" ("+r.sexo+")":" sem sexo cadastrado"}, ${r.dias_conf} dias, entrada ${fmt(r.peso_entrada,0)} kg. Cadastre em Cadastros.`, "sem curva");
+    if(!temHoje) {}
+    else if(r.pvEsp==null)
+      add("medio","Sem curva cadastrada para esta baia",`Categoria "${r.ct}"${r.sexo?" ("+r.sexo+")":" sem sexo cadastrado"}, ${r.dias_conf??"–"} dias, entrada ${fmt(r.peso_entrada,0)} kg. Cadastre em Cadastros.`, "sem curva");
     else if(Math.abs(r.dCurva) > L.curva)
       add(r.dCurva < -L.curva*2?"alto":"medio","Consumo "+(r.dCurva<0?"abaixo":"acima")+" da curva esperada",
-        `${fmt(r.cons_dia_pv)}% PV hoje × ${fmt(r.pvEsp)}% esperado para ${r.sexo.toLowerCase()} com ${r.dias_conf} dias (${pp(r.dCurva)}). Tolerância: ±${fmt(L.curva)} p.p.`, `${pp(r.dCurva)} × curva`);
+        `${fmt(r.cons_dia_pv)}% PV hoje × ${fmt(r.pvEsp)}% esperado para ${r.sexo.toLowerCase()} com ${r.dias_conf??"–"} dias (${pp(r.dCurva)}). Tolerância: ±${fmt(L.curva)} p.p.`, `${pp(r.dCurva)} × curva`);
     else add("ok","Consumo dentro da curva esperada",`${fmt(r.cons_dia_pv)}% PV × ${fmt(r.pvEsp)}% esperado (${pp(r.dCurva)}).`);
   });
 
@@ -582,6 +588,7 @@ $("#loginForm").addEventListener("submit", async e=>{
   $("#btnEntrar").disabled = true; $("#loginErr").textContent = "Entrando…";
   try{
     const r = await rpc("entrar", {p_senha: senha});
+    if(r && r.erro) throw new ErroAPI(r.erro==="muitas_tentativas" ? "Muitas tentativas erradas. Espere 15 minutos e tente de novo." : "Senha não reconhecida.", "senha");
     $("#pwd").value = ""; $("#loginErr").textContent = "";
     LS.set("sessao", r);
     iniciar(r);
@@ -890,7 +897,7 @@ function renderVistoria(){
     </div>
     <div class="vt-card ${V.dir}" id="vtCard">
       <div class="vt-head">
-        <div><b>Lote ${esc(r.lote)} · ${r.cab} cab</b><small>${r.setor?esc(r.setor)+" · ":""}${esc(r.ct)}${r.sexo?" · "+r.sexo:""}${info?" · "+esc(info):""} · entrada ${fmt(r.peso_entrada,0)} kg</small></div>
+        <div><b>Lote ${esc(r.lote)} · ${r.cab} cab</b><small>${r.setor?esc(r.setor)+" · ":""}${esc(r.ct)}${r.sexo?" · "+esc(r.sexo):""}${info?" · "+esc(info):""} · entrada ${fmt(r.peso_entrada,0)} kg</small></div>
         <span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span>
       </div>
       <section class="vt-sec">
@@ -914,7 +921,7 @@ function renderVistoria(){
       </section>
       <section class="vt-sec">
         <div class="tiles t2">
-          <div class="tile"><span>Dias de cocho</span><b>${r.dias_conf}</b><small>entrada ${esc(r.dt_entrada||"–")}${r.dt_abate?" · abate "+esc(r.dt_abate):""}</small></div>
+          <div class="tile"><span>Dias de cocho</span><b>${r.dias_conf??"–"}</b><small>entrada ${esc(r.dt_entrada||"–")}${r.dt_abate?" · abate "+esc(r.dt_abate):""}</small></div>
           <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
         </div>
       </section>
@@ -1037,7 +1044,7 @@ function renderAlertas(R){
     const top=[...r.alertas].sort((a,b)=>SEV[b.sev]-SEV[a.sev]);
     return `<div class="alert ${r.sev}" data-cur="${esc(r.curral)}" role="button" tabindex="0">
       <div class="cur">${esc(r.curral)}</div>
-      <div class="msg">${esc(top[0].titulo)}<small>${top.map(c=>esc(c.curto||c.titulo)).join(" · ")} · ${r.cab} cab · ${r.dias_conf} dias</small></div></div>`;
+      <div class="msg">${esc(top[0].titulo)}<small>${top.map(c=>esc(c.curto||c.titulo)).join(" · ")} · ${r.cab} cab · ${r.dias_conf??"–"} dias</small></div></div>`;
   }).join("") : `<div class="empty">Nenhum alerta com esses filtros. ✔</div>`;
   $("#anAlerts").querySelectorAll(".alert").forEach(el=>{ el.onclick=()=>openBaia(el.dataset.cur); el.onkeydown=e=>{ if(e.key==="Enter") openBaia(el.dataset.cur); }; });
 }
@@ -1083,7 +1090,7 @@ function renderScatter(R){
   box.querySelectorAll("circle").forEach(c=>{
     const r=R.find(o=>o.curral===c.dataset.cur);
     const show=()=>{ const b=box.getBoundingClientRect(), cb=c.getBoundingClientRect();
-      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf} dias<br>${fmt(r.cons_dia_pv)}% PV${r.pvEsp!=null?` · esp. ${fmt(r.pvEsp)}%`:""}<br>${fmt(r.cons_dia_ms)} kg MS · ${varF(r.dOntem,r.dOntemKg)} × ontem`;
+      tip.innerHTML=`<b>${esc(r.curral)}</b> · ${r.dias_conf??"–"} dias<br>${fmt(r.cons_dia_pv)}% PV${r.pvEsp!=null?` · esp. ${fmt(r.pvEsp)}%`:""}<br>${fmt(r.cons_dia_ms)} kg MS · ${varF(r.dOntem,r.dOntemKg)} × ontem`;
       tip.style.left=(cb.left-b.left+cb.width/2)+"px"; tip.style.top=(cb.top-b.top)+"px"; tip.style.opacity=1; };
     c.onmouseenter=show; c.onmouseleave=()=>tip.style.opacity=0; c.onclick=()=>openBaia(r.curral);
   });
@@ -1197,7 +1204,7 @@ function renderTabela(R){
   const cls=v=>v==null?"":v<0?"down":v>0?"up":"";
   $("#tbl").innerHTML=`<thead><tr>${COLS.map(c=>`<th class="${c.l?"l":""}" data-k="${chaveCol(c)}" ${c.semOrdem?'style="cursor:default"':""}>${c.t}${c.kg?(UNID==="kg"?" (kg)":" (%)"):""}${k===chaveCol(c)?(dir>0?" ▲":" ▼"):""}</th>`).join("")}</tr></thead><tbody>`+
     R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
-      <td>${r.cab}</td><td>${r.dias_conf}</td><td class="l">${esc(r.racao)}</td><td>${r.racao_dias??"–"}</td><td>${fmt(r.cons_dia_mn)}</td><td><b>${fmt(r.cons_dia_ms)}</b></td>
+      <td>${r.cab}</td><td>${r.dias_conf??"–"}</td><td class="l">${esc(r.racao)}</td><td>${r.racao_dias??"–"}</td><td>${fmt(r.cons_dia_mn)}</td><td><b>${fmt(r.cons_dia_ms)}</b></td>
       <td class="${cls(r.dOntem)}">${varF(r.dOntem,r.dOntemKg)}</td><td class="${cls(r.d5)}">${varF(r.d5,r.d5Kg)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
       <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
     (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
@@ -1210,7 +1217,9 @@ $("#btnCsv").onclick=()=>{
   const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média curta","Var. ontem %","Var. média %","Var. ontem kg","Var. média kg","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
   const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
   const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
-  const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ const s=String(v); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
+  const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ let s=String(v??"");
+    if(/^[=+\-@\t\r]/.test(s) && !/^-?[\d.,]+$/.test(s)) s="'"+s;   // texto do PDF não vira fórmula no Excel
+    return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download=`mr-report_${S.farm}_${S.data.split("/").reverse().join("-")}.csv`; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500);
 };
@@ -1224,7 +1233,7 @@ function openBaia(cur){
   $("#sheet").innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
       <div><h2>Curral ${esc(r.curral)} <span class="chip ${r.sev}" style="vertical-align:3px">${LBL[r.sev]}</span></h2>
-      <div style="color:var(--ink2);font-size:13px">${r.setor?esc(r.setor)+" · ":""}Lote ${esc(r.lote)} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(info?", "+esc(info):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate||"–")}</div></div>
+      <div style="color:var(--ink2);font-size:13px">${r.setor?esc(r.setor)+" · ":""}Lote ${esc(r.lote)} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+esc(r.sexo)+(info?", "+esc(info):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf??"–"} dias · abate ${esc(r.dt_abate||"–")}</div></div>
       <div style="display:flex;gap:6px"><button class="btn small lime" id="irVist">Ver na vistoria</button><button class="btn ghost small" id="closeM">Fechar</button></div>
     </div>
     <h3 style="margin-top:14px">Consumo do dia (kg/cab)</h3>
@@ -1349,7 +1358,9 @@ const ERROS_FAZ = {
   sistema_invalido: "Escolha o sistema que gera o relatório (TGC, Feed Manager ou FarmTell).",
   nao_e_pdf: "O arquivo escolhido não é um PDF.",
   arquivo_grande: "O PDF passa de 15 MB.",
-  fazenda_inexistente: "Fazenda não encontrada. Recarregue a lista."
+  fazenda_inexistente: "Fazenda não encontrada. Recarregue a lista.",
+  senha_curta: "A senha da equipe precisa ter pelo menos 6 caracteres.",
+  limite_envios: "Muitos arquivos enviados de uma vez. Espere o robô ler os que já foram e tente de novo mais tarde."
 };
 const slug = s => (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);
 let FZ_LISTA = [];
@@ -1438,7 +1449,7 @@ async function enviarPDF2(f, arqs, dizer){
       await esperar(passo);
       for(const e of enviados) if(!res[e.id]){
         const st = await rpc("situacao_upload", {p_token:S.sessao.token, p_id:e.id});
-        if(st && st.status && st.status !== "pendente") res[e.id] = st;
+        if(st && st.status && st.status !== "pendente" && st.status !== "lendo") res[e.id] = st;
       }
       if(Object.keys(res).length === enviados.length) break;
       // o robô que estava rodando pode ter começado antes do envio: pede outra rodada quando o intervalo mínimo passar
@@ -1503,6 +1514,7 @@ function formFazenda(f){
     const app = $("#fzApp").value.replace(/\s/g,"");
     if(!$("#fzNome").value.trim()) return msg.textContent = ERROS_FAZ.nome_obrigatorio;
     if(nova && !$("#fzSenha").value.trim()) return msg.textContent = ERROS_FAZ.senha_equipe_obrigatoria;
+    if($("#fzSenha").value.trim() && $("#fzSenha").value.trim().length < 6) return msg.textContent = ERROS_FAZ.senha_curta;
     if(app && !/^[a-zA-Z]{16}$/.test(app)) return msg.textContent = ERROS_FAZ.senha_app_invalida;
     if(nova && (!$("#fzEmail").value.trim() || !app)) { if(!confirmarSemEmail()) return; }
     const nomeDigitado = $("#fzNome").value.trim();

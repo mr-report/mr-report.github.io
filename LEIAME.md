@@ -112,6 +112,16 @@ pedir ao GitHub que rode o robô.
    - FarmTell ("Relatório Lotes Ativos"): média curta de 3 dias (inclui o dia), consumo do dia anterior e escore
      D-2, D-1 e do dia (notas de -2 a 2; negativa = cocho limpo). O "Critério" (nome do dono) é ignorado.
 
+### 7. Reforço de segurança
+1. No Supabase (SQL Editor), rode `supabase/06_seguranca.sql` inteiro, uma vez (depois de recarregar o app).
+2. Troque a senha do administrador (mínimo 8 caracteres) com `select public.definir_senha_adm('SUA-SENHA');`
+   e feche a aba sem salvar a consulta.
+3. O que o 06 faz: trava o login depois de 10 senhas erradas em 15 min no mesmo aparelho (e de 150 no total);
+   exige senha de equipe com 6+ caracteres; limita os envios de PDF (40 esperando leitura e 120 por dia por
+   fazenda); apaga do banco os PDFs já lidos.
+4. Robô: PDF com mais de 60 páginas, mais de 15 MB, data no futuro, corrompido ou que demore mais de 90 s
+   é recusado e avisado, sem travar as outras fazendas. No filtro de remetente vale só o endereço do e-mail.
+
 ## Manutenção
 - **Nova fazenda**: no app, aba **Fazendas (ADM) → + Nova fazenda**. Preencha nome, senha da equipe, e-mail e senha de app.
   Não precisa mexer no Supabase nem no GitHub.
