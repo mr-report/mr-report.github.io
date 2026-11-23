@@ -87,6 +87,9 @@ h3 small{font-weight:400;color:var(--ink2);font-size:12px}
 /* ---------- chips, status ---------- */
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap;font-weight:600}
 .chip.ok{background:var(--good-bg);color:var(--good)}
+.chip.sist{background:#e6ecf5;color:var(--primary)}
+@media (prefers-color-scheme:dark){.chip.sist{background:#1b2a44;color:#b9c8e6}}
+.up-msg{font-size:13px;margin:-4px 2px 10px}.up-msg:empty{display:none}
 .chip.medio{background:var(--warn-bg);color:#8a6200}
 .chip.alto{background:var(--crit-bg);color:var(--crit)}
 @media (prefers-color-scheme:dark){.chip.medio{color:var(--warn)}}
@@ -285,7 +288,7 @@ td.l,th.l{text-align:left}
         <div class="card"><div class="vt-sec-h"><h3 style="margin:0" id="scTit">Consumo × dias de cocho</h3><div class="seg" id="scMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
       </div>
       <div class="card" style="margin-bottom:12px">
-        <h3>Mapa de variação do consumo <small>MS do dia × média dos 5 dias anteriores, por relatório · toque numa célula para abrir a baia</small></h3>
+        <h3>Mapa de variação do consumo <small id="heatSub">MS do dia × média dos dias anteriores do relatório, por relatório · toque numa célula para abrir a baia</small></h3>
         <div class="heat" id="anHeat"></div>
       </div>
       <div class="an-grid c2b">
@@ -377,14 +380,17 @@ const isoParaBRc = s => { if(!s) return s; const [y,m,d] = s.slice(0,10).split("
 const isoHoje = (dias=0) => { const d = new Date(); d.setDate(d.getDate()+dias); return d.toISOString().slice(0,10); };
 
 /* transforma o cache bruto no formato usado pelas análises */
+const NOME_SIST = {tgc:"TGC", feedmanager:"Feed Manager", farmtell:"FarmTell"};
 function montar(fid, c){
-  const rel = {};
+  const rel = {}, info = {};
+  (c.relatorios||[]).forEach(x=>{ info[isoParaBR(x.data_ref)] = {janela:x.janela_media||5, sistema:x.sistema||"tgc"}; });
   (c.baias||[]).forEach(b=>{
-    const k = isoParaBR(b.data_ref);
-    (rel[k] = rel[k] || []).push({...b, dt_entrada: isoParaBRc(b.dt_entrada), dt_abate: isoParaBRc(b.dt_abate)});
+    const k = isoParaBR(b.data_ref), i = info[k] || {janela:5, sistema:"tgc"};
+    (rel[k] = rel[k] || []).push({...b, lote: b.lote==null?b.lote:String(b.lote), janela:i.janela, sistema:i.sistema,
+      dt_entrada: isoParaBRc(b.dt_entrada), dt_abate: isoParaBRc(b.dt_abate)});
   });
-  DATA[fid] = { nome: c.nome, relatorios: rel };
-  SRV[fid] = { config: c.config, config_atualizado_em: c.config_atualizado_em, gerado_em: c.gerado_em, relatorios: c.relatorios || [] };
+  DATA[fid] = { nome: c.nome, relatorios: rel, info };
+  SRV[fid] = { config: c.config, config_atualizado_em: c.config_atualizado_em, gerado_em: c.gerado_em, relatorios: c.relatorios || [], sistema: c.sistema || "tgc" };
   delete cfgCache[fid];
 }
 
@@ -398,6 +404,7 @@ async function sincronizar(fid){
   const corte = isoHoje(-DIAS_HIST);
   const novo = {
     nome: r.fazenda ? r.fazenda.nome : (c.nome || fid),
+    sistema: (r.fazenda && r.fazenda.sistema) || c.sistema || "tgc",
     baias: (c.baias||[]).filter(b=>b.data_ref < desde && b.data_ref >= corte).concat(r.baias||[]),
     relatorios: (c.relatorios||[]).filter(x=>x.data_ref < desde && x.data_ref >= corte).concat(r.relatorios||[]),
     config: r.config, config_atualizado_em: r.config_atualizado_em, gerado_em: r.gerado_em
@@ -407,12 +414,14 @@ async function sincronizar(fid){
   return novo;
 }
 
+/* dias da "média curta" do relatório escolhido: 5 no TGC, 3 no Feed Manager/FarmTell */
+const J = () => { const i = S.farm && DATA[S.farm] && DATA[S.farm].info && DATA[S.farm].info[S.data]; return (i && i.janela) || 5; };
 /* ---------- cadastros de exemplo ---------- */
 function defaultConfig(farmId){
   const cts = new Set();
   Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>cts.add(String(r.ct))));
   const femea = ["NE","NX","VS","NO","VA","FE"];
-  const categorias = {}; [...cts].sort().forEach(c=>categorias[c] = femea.includes(c)?"Fêmea":"Macho");
+  const categorias = {}; [...cts].sort().forEach(c=>categorias[c] = (femea.includes(c) || /novilh|vaca|f[êe]mea|bezerra|matriz/i.test(c))?"Fêmea":"Macho");
   const faixas = [[1,20,2.00],[21,40,2.30],[41,65,2.45],[66,90,2.35],[91,110,2.25],[111,250,2.15]];
   const curva = [];
   faixas.forEach(([a,b,v])=>{
@@ -420,7 +429,7 @@ function defaultConfig(farmId){
     curva.push({sexo:"Fêmea",pesoMin:0,pesoMax:9999,diaIni:a,diaFim:b,pv:+(v-0.10).toFixed(2)});
   });
   const dietas = new Set();
-  Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>dietas.add(r.racao)));
+  Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>{ if(r.racao) dietas.add(r.racao); }));
   const limites = {"Padrão":{ontem:5,cinco:8,curva:0.20,escore:3}};
   [...dietas].sort().forEach(d=>limites[d]={...limites["Padrão"]});
   return {
@@ -467,29 +476,40 @@ const SEV = {ok:0, medio:1, alto:2};
 function analisar(farmId, data){
   const cfg = getConfig(farmId);
   const rows = DATA[farmId].relatorios[data].map(r=>({...r}));
+  // relatórios que não trazem o consumo de ontem (Feed Manager): usa o relatório do dia anterior, se existir
+  const dAnt = (()=>{ const [d,m,y]=data.split("/").map(Number); const x=new Date(y,m-1,d-1); return `${String(x.getDate()).padStart(2,"0")}/${String(x.getMonth()+1).padStart(2,"0")}/${x.getFullYear()}`; })();
+  const ant = DATA[farmId].relatorios[dAnt];
   rows.forEach(r=>{
-    const L = limitesDe(cfg, r.racao);
-    r.dOntem = (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100;
+    if(r.ms_1d==null && ant){ const x = ant.find(o=>o.lote===r.lote && o.curral===r.curral) || ant.find(o=>o.lote===r.lote);
+      if(x){ r.ms_1d = x.cons_dia_ms; r.mn_1d = x.cons_dia_mn; r.ims_pv_1d = x.cons_dia_pv; r.ontemDoAnterior = true; } }
+  });
+  rows.forEach(r=>{
+    const L = limitesDe(cfg, r.racao), Jr = r.janela || 5;
+    r.dOntem = r.ms_1d ? (r.cons_dia_ms - r.ms_1d)/r.ms_1d*100 : null;
     r.d5 = (r.cons_dia_ms - r.ms_5d)/r.ms_5d*100;
-    r.dOntemKg = r.cons_dia_ms - r.ms_1d;
-    r.d5Kg = r.cons_dia_ms - r.ms_5d;
+    r.dOntemKg = r.ms_1d!=null ? r.cons_dia_ms - r.ms_1d : null;
+    r.d5Kg = r.ms_5d!=null ? r.cons_dia_ms - r.ms_5d : null;
+    r.temCocho = r.cocho_d1!=null;
     const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv;
     r.dCurva = e.pv==null ? null : r.cons_dia_pv - e.pv;
-    r.ajuste = ajusteNota(cfg, r.cocho_d1);
+    r.ajuste = r.temCocho ? ajusteNota(cfg, r.cocho_d1) : null;
     r.checks = [];
     const add=(sev,titulo,texto,curto)=>r.checks.push({sev,titulo,texto,curto});
 
     // 1. variação x ontem
-    if(Math.abs(r.dOntem) > L.ontem)
+    if(r.dOntem==null)
+      add("ok","Sem consumo de ontem para comparar","O relatório não traz o consumo de ontem e não há relatório do dia anterior guardado. A comparação aparece a partir do próximo relatório.");
+    else if(Math.abs(r.dOntem) > L.ontem)
       add(Math.abs(r.dOntem)>L.ontem*2?"alto":"medio","Consumo "+(r.dOntem<0?"caiu":"subiu")+" em relação a ontem",
         `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_1d)} ontem (${pct(r.dOntem)}). Limite da dieta: ±${L.ontem}%.`, `${pct(r.dOntem)} × ontem`);
     else add("ok","Variação em relação a ontem dentro do limite",`${pct(r.dOntem)} (limite ±${L.ontem}%).`);
 
-    // 2. variação x média 5 dias
-    if(Math.abs(r.d5) > L.cinco)
-      add(r.d5 < -L.cinco*1.5?"alto":"medio","Consumo "+(r.d5<0?"abaixo":"acima")+" da média dos últimos 5 dias",
-        `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_5d)} na média de 5 dias (${pct(r.d5)}). Limite: ±${L.cinco}%.`, `${pct(r.d5)} × média 5d`);
-    else add("ok","Variação em relação à média de 5 dias dentro do limite",`${pct(r.d5)} (limite ±${L.cinco}%).`);
+    // 2. variação x média curta (5 dias no TGC, 3 no Feed Manager)
+    if(r.d5==null || isNaN(r.d5)) add("ok",`Sem média de ${Jr} dias no relatório`,"Não foi possível comparar.");
+    else if(Math.abs(r.d5) > L.cinco)
+      add(r.d5 < -L.cinco*1.5?"alto":"medio","Consumo "+(r.d5<0?"abaixo":"acima")+` da média dos últimos ${Jr} dias`,
+        `${fmt(r.cons_dia_ms)} kg MS hoje × ${fmt(r.ms_5d)} na média de ${Jr} dias (${pct(r.d5)}). Limite: ±${L.cinco}%.`, `${pct(r.d5)} × média ${Jr}d`);
+    else add("ok",`Variação em relação à média de ${Jr} dias dentro do limite`,`${pct(r.d5)} (limite ±${L.cinco}%).`);
 
     // 3. dentro do esperado (curva)
     if(r.pvEsp==null)
@@ -503,10 +523,11 @@ function analisar(farmId, data){
   // 4. escore de cocho: coerência com o consumo, com a curva e com o restante do confinamento
   rows.forEach(r=>{
     const L = limitesDe(cfg, r.racao);
+    if(!r.temCocho) return;                         // relatório sem leitura de cocho: não há o que conferir
     if(r.ajuste==null){ r.checks.push({sev:"medio",titulo:`Nota ${fmt(r.cocho_d1,1)} sem ajuste cadastrado`,texto:"Cadastre o ajuste desta nota na tabela de escore.",curto:"nota sem ajuste"}); return; }
     const probs = [];
-    const dif = r.dOntem - r.ajuste;
-    if(Math.abs(dif) > L.escore)
+    const dif = r.dOntem==null ? 0 : r.dOntem - r.ajuste;
+    if(r.dOntem!=null && Math.abs(dif) > L.escore)
       probs.push({sev: Math.sign(r.dOntem)!==Math.sign(r.ajuste) && r.ajuste!==0 ? "alto":"medio",
         titulo:"Escore × consumo: variação diferente da que a nota pedia",
         texto:`Nota de ontem ${fmt(r.cocho_d1,1)} pedia ajuste de ${pct(r.ajuste,0)}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
@@ -517,14 +538,14 @@ function analisar(farmId, data){
         probs.push({sev:"alto",titulo:"Escore × curva: nota pede redução, mas a baia já está abaixo da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} abaixo do esperado. Verificar sanidade, água e dieta.`,curto:"escore × curva"});
     }
     // comparação com as baias da mesma dieta
-    const pares = rows.filter(o=>o!==r && o.racao===r.racao);
+    const pares = rows.filter(o=>o!==r && o.racao===r.racao && o.temCocho && o.d5!=null);
     if(pares.length>=3){
       const cont = {}; pares.forEach(o=>cont[o.cocho_d1]=(cont[o.cocho_d1]||0)+1);
       const moda = +Object.entries(cont).sort((a,b)=>b[1]-a[1])[0][0];
       const share = cont[moda]/pares.length;
       const med = pares.map(o=>o.d5).sort((a,b)=>a-b)[Math.floor(pares.length/2)];
       if(r.cocho_d1!==moda && share>=0.6 && Math.abs(r.d5-med) <= L.cinco/2)
-        probs.push({sev:"medio",titulo:"Escore × confinamento: nota fora do padrão da dieta",texto:`${Math.round(share*100)}% das baias com a mesma dieta tiveram nota ${fmt(moda,1)} ontem; esta teve ${fmt(r.cocho_d1,1)}, sem diferença de consumo que justifique (${pct(r.d5)} × mediana ${pct(med)} vs. média 5d).`,curto:"nota fora do padrão"});
+        probs.push({sev:"medio",titulo:"Escore × confinamento: nota fora do padrão da dieta",texto:`${Math.round(share*100)}% das baias com a mesma dieta tiveram nota ${fmt(moda,1)} ontem; esta teve ${fmt(r.cocho_d1,1)}, sem diferença de consumo que justifique (${pct(r.d5)} × mediana ${pct(med)} vs. média ${r.janela||5}d).`,curto:"nota fora do padrão"});
     }
     // ajuste persistente
     const a2 = ajusteNota(cfg,r.cocho_d2), a3 = ajusteNota(cfg,r.cocho_d3);
@@ -764,7 +785,7 @@ function historico(farmId, r){
     const dt=parseD(d);
     pts[dt.getTime()]={dt,dias:x.dias_conf,ms:x.cons_dia_ms,mn:x.cons_dia_mn,pv:x.cons_dia_pv,racao:x.racao,src:"rel"};
     const on=addDays(dt,-1);   // o relatório também traz o consumo de ontem
-    if(!pts[on.getTime()]) pts[on.getTime()]={dt:on,dias:x.dias_conf-1,ms:x.ms_1d,mn:x.mn_1d,pv:x.ims_pv_1d,racao:x.racao,src:"rel"};
+    if(x.ms_1d!=null && !pts[on.getTime()]) pts[on.getTime()]={dt:on,dias:x.dias_conf-1,ms:x.ms_1d,mn:x.mn_1d,pv:x.ims_pv_1d,racao:x.racao,src:"rel"};
   });
   const arr=Object.values(pts).sort((a,b)=>a.dt-b.dt);
   if(_histCache.size>400) _histCache.clear();
@@ -860,7 +881,7 @@ function renderVistoria(){
     </div>
     <div class="vt-card ${V.dir}" id="vtCard">
       <div class="vt-head">
-        <div><b>Lote ${esc(r.lote)} · ${r.cab} cab</b><small>${esc(r.ct)}${r.sexo?" · "+r.sexo:""}${info?" · "+esc(info):""} · entrada ${fmt(r.peso_entrada,0)} kg</small></div>
+        <div><b>Lote ${esc(r.lote)} · ${r.cab} cab</b><small>${r.setor?esc(r.setor)+" · ":""}${esc(r.ct)}${r.sexo?" · "+r.sexo:""}${info?" · "+esc(info):""} · entrada ${fmt(r.peso_entrada,0)} kg</small></div>
         <span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span>
       </div>
       <section class="vt-sec">
@@ -878,8 +899,8 @@ function renderVistoria(){
       <section class="vt-sec">
         <h3>Comparação do consumo (MS)</h3>
         <div class="tiles t2">
-          <div class="tile cmp ${nO}"><span>vs ontem</span><b>${seta(r.dOntem)}${pct(r.dOntem)}</b><small>ontem ${fmt(r.ms_1d)} kg · limite ±${L.ontem}%</small></div>
-          <div class="tile cmp ${n5}"><span>vs média 5 dias</span><b>${seta(r.d5)}${pct(r.d5)}</b><small>média ${fmt(r.ms_5d)} kg · limite ±${L.cinco}%</small></div>
+          <div class="tile cmp ${nO}"><span>vs ontem</span><b>${seta(r.dOntem)}${pct(r.dOntem)}</b><small>${r.ms_1d==null?"sem relatório de ontem":"ontem "+fmt(r.ms_1d)+" kg · limite ±"+L.ontem+"%"}</small></div>
+          <div class="tile cmp ${n5}"><span>vs média ${r.janela||5} dias</span><b>${seta(r.d5)}${pct(r.d5)}</b><small>média ${fmt(r.ms_5d)} kg · limite ±${L.cinco}%</small></div>
         </div>
       </section>
       <section class="vt-sec">
@@ -888,10 +909,10 @@ function renderVistoria(){
           <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
         </div>
       </section>
-      <section class="vt-sec">
+${r.temCocho?`      <section class="vt-sec">
         <h3>Leitura de cocho</h3>
         <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
-      </section>
+      </section>`:""}
       <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
         <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
     </div>
@@ -984,16 +1005,19 @@ function renderAnalise(){
   $("#aResumo").textContent = R.length===S.rows.length ? "" : `${R.length} de ${S.rows.length} baias`;
   renderKpis(R); renderAlertas(R); renderScatter(R); renderHeat(R); renderCmp(R); renderDietas(R);
 }
+/* variação ponderada do consumo de MS de hoje contra o campo k, só nas baias que têm k */
+function varCampo(R,k){ const rs=R.filter(r=>r[k]!=null && r[k]>0); if(!rs.length) return {p:null,kg:null};
+  const a=media(rs,"cons_dia_ms"), b=media(rs,k); return {p:(a-b)/b*100, kg:a-b}; }
 function media(R,k){ const cab=R.reduce((s,r)=>s+(r[k]!=null?r.cab:0),0); return cab? R.reduce((s,r)=>s+(r[k]!=null?r[k]*r.cab:0),0)/cab : null; }
 function renderKpis(R){
   if(!R.length){ $("#anKpis").innerHTML=`<div class="card empty">Nenhuma baia com esses filtros.</div>`; return; }
-  const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), ms1=media(R,"ms_1d"), ms5=media(R,"ms_5d");
+  const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), vO=varCampo(R,"ms_1d"), v5=varCampo(R,"ms_5d");
   const pv=media(R,"cons_dia_pv"), esp=media(R.filter(r=>r.pvEsp!=null),"pvEsp");
   const nA=R.filter(r=>r.sev==="alto").length, nM=R.filter(r=>r.sev==="medio").length;
   const dias=media(R,"dias_conf");
   $("#anKpis").innerHTML=`
     <div class="kpi"><div class="l">Baias · cabeças</div><div class="v">${R.length} · ${cab.toLocaleString("pt-BR")}</div><div class="s">${fmt(dias,0)} dias de cocho em média</div></div>
-    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(ms)}</div><div class="s"><span class="${(ms-ms1)<0?"down":"up"}">${varF((ms-ms1)/ms1*100, ms-ms1)}</span> × ontem · <span class="${(ms-ms5)<0?"down":"up"}">${varF((ms-ms5)/ms5*100, ms-ms5)}</span> × 5 dias</div></div>
+    <div class="kpi"><div class="l">MS média (kg/cab)</div><div class="v">${fmt(ms)}</div><div class="s"><span class="${vO.kg<0?"down":"up"}">${vO.p==null?"–":varF(vO.p, vO.kg)}</span> × ontem · <span class="${v5.kg<0?"down":"up"}">${v5.p==null?"–":varF(v5.p, v5.kg)}</span> × ${J()} dias</div></div>
     <div class="kpi"><div class="l">MN média (kg/cab)</div><div class="v">${fmt(media(R,"cons_dia_mn"))}</div><div class="s">matéria natural</div></div>
     <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(pv)}%</div><div class="s">${esp!=null?"esperado "+fmt(esp)+"% ("+pp(pv-esp)+")":"sem curva cadastrada"}</div></div>
     <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nA+nM}</div><div class="s"><span class="chip alto">${nA} alto</span> <span class="chip medio">${nM} atenção</span></div></div>`;
@@ -1073,7 +1097,7 @@ function renderHeat(R){
   const linhas=[...R].sort(ordCurral).map(r=>{
     const cel=datas.map(d=>{ const x=acharBaia(rel[d],r); if(!x||!x.ms_5d) return `<td class="vazio" title="sem dado em ${d}"></td>`;
       const vp=(x.cons_dia_ms-x.ms_5d)/x.ms_5d*100, vk=x.cons_dia_ms-x.ms_5d;
-      return `<td style="background:${UNID==="kg"?corHeat(vk,ESC_KG):corHeat(vp)}" title="${esc(r.curral)} · ${d}: ${fmt(x.cons_dia_ms)} kg MS (${varF(vp,vk)} × média 5 dias)" data-cur="${esc(r.curral)}" data-d="${d}"></td>`; }).join("");
+      return `<td style="background:${UNID==="kg"?corHeat(vk,ESC_KG):corHeat(vp)}" title="${esc(r.curral)} · ${d}: ${fmt(x.cons_dia_ms)} kg MS (${varF(vp,vk)} × média ${x.janela||5} dias)" data-cur="${esc(r.curral)}" data-d="${d}"></td>`; }).join("");
     return `<tr><td class="lbl">${esc(r.curral)}</td>${cel}</tr>`;
   }).join("");
   box.innerHTML=`<table><thead><tr><th></th>${datas.map(d=>`<th>${d.slice(0,5)}</th>`).join("")}</tr></thead><tbody>${linhas}</tbody></table>
@@ -1134,18 +1158,18 @@ function renderCmp(R){
 }
 function renderDietas(R){
   const grupos={}; R.forEach(r=>(grupos[r.racao]=grupos[r.racao]||[]).push(r));
-  const linhas=Object.entries(grupos).map(([d,rs])=>{ const ms=media(rs,"cons_dia_ms"), ms1=media(rs,"ms_1d");
-    return {d, n:rs.length, cab:rs.reduce((s,r)=>s+r.cab,0), dias:media(rs,"dias_conf"), ms, mn:media(rs,"cons_dia_mn"), pv:media(rs,"cons_dia_pv"), dO:(ms-ms1)/ms1*100, dOk:ms-ms1, al:rs.filter(r=>r.sev!=="ok").length}; })
+  const linhas=Object.entries(grupos).map(([d,rs])=>{ const ms=media(rs,"cons_dia_ms"), vO=varCampo(rs,"ms_1d");
+    return {d, n:rs.length, cab:rs.reduce((s,r)=>s+r.cab,0), dias:media(rs,"dias_conf"), ms, mn:media(rs,"cons_dia_mn"), pv:media(rs,"cons_dia_pv"), dO:vO.p, dOk:vO.kg, al:rs.filter(r=>r.sev!=="ok").length}; })
     .sort((a,b)=>b.cab-a.cab);
   $("#anDietas").innerHTML=`<thead><tr><th class="l">Dieta</th><th>Baias</th><th>Cab</th><th>Dias</th><th>MN</th><th>MS</th><th>%PV</th><th>Δ ontem</th><th>Alertas</th></tr></thead><tbody>`+
     linhas.map(l=>`<tr data-d="${esc(l.d)}"><td class="l"><b>${esc(l.d)}</b></td><td>${l.n}</td><td>${l.cab.toLocaleString("pt-BR")}</td><td>${fmt(l.dias,0)}</td><td>${fmt(l.mn)}</td><td>${fmt(l.ms)}</td><td>${fmt(l.pv)}</td>
-      <td class="${l.dO<0?"down":"up"}">${varF(l.dO,l.dOk)}</td><td>${l.al?`<span class="chip medio">${l.al}</span>`:"–"}</td></tr>`).join("")+`</tbody>`;
+      <td class="${l.dO<0?"down":"up"}">${l.dO==null?"–":varF(l.dO,l.dOk)}</td><td>${l.al?`<span class="chip medio">${l.al}</span>`:"–"}</td></tr>`).join("")+`</tbody>`;
   $("#anDietas").querySelectorAll("tbody tr").forEach(tr=>tr.onclick=()=>{ $("#aDieta").value=tr.dataset.d; renderAnalise(); });
 }
 /* tabela completa */
 const COLS=[
   {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias cocho"},{k:"racao",t:"Dieta",l:1},{k:"racao_dias",t:"Dias dieta"},
-  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem",kg:"dOntemKg"},{k:"d5",t:"Δ 5d",kg:"d5Kg"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},
+  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem",kg:"dOntemKg"},{k:"d5",t:"Δ média",kg:"d5Kg"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},
   {k:"tend",t:"Últimos 10 dias",l:1,semOrdem:1},{k:"cocho_d1",t:"Cocho D-3/D-2/D-1"}
 ];
 const chaveCol = c => UNID==="kg" && c.kg ? c.kg : c.k;
@@ -1174,7 +1198,7 @@ function renderTabela(R){
 }
 $("#btnCsv").onclick=()=>{
   const R=[...baiasRows()].sort(ordCurral);
-  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média 5d","Var. ontem %","Var. 5d %","Var. ontem kg","Var. 5d kg","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
+  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média curta","Var. ontem %","Var. média %","Var. ontem kg","Var. média kg","Desvio curva p.p.","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
   const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
   const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
   const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ const s=String(v); return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
@@ -1191,16 +1215,16 @@ function openBaia(cur){
   $("#sheet").innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
       <div><h2>Curral ${esc(r.curral)} <span class="chip ${r.sev}" style="vertical-align:3px">${LBL[r.sev]}</span></h2>
-      <div style="color:var(--ink2);font-size:13px">Lote ${r.lote} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(info?", "+esc(info):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate||"–")}</div></div>
+      <div style="color:var(--ink2);font-size:13px">${r.setor?esc(r.setor)+" · ":""}Lote ${esc(r.lote)} · ${r.cab} cab · ${esc(r.ct)}${r.sexo?" ("+r.sexo+(info?", "+esc(info):"")+")":""} · entrada ${esc(r.dt_entrada)} · ${r.dias_conf} dias · abate ${esc(r.dt_abate||"–")}</div></div>
       <div style="display:flex;gap:6px"><button class="btn small lime" id="irVist">Ver na vistoria</button><button class="btn ghost small" id="closeM">Fechar</button></div>
     </div>
     <h3 style="margin-top:14px">Consumo do dia (kg/cab)</h3>
     <div class="grid2" style="grid-template-columns:repeat(3,1fr)">${mini("MN",fmt(r.cons_dia_mn))}${mini("MS",fmt(r.cons_dia_ms))}${mini("%PV",fmt(r.cons_dia_pv)+(r.pvEsp!=null?` <small>esp. ${fmt(r.pvEsp)}</small>`:""))}</div>
-    <div class="grid2" style="margin-top:8px">${mini("MS ontem",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("MS média 5 dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta atual",esc(r.racao)+" <small>("+(r.racao_dias??"–")+" dias)</small>")}</div>
+    <div class="grid2" style="margin-top:8px">${mini("MS ontem",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("MS média "+(r.janela||5)+" dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta atual",esc(r.racao)+" <small>("+(r.racao_dias??"–")+" dias)</small>")}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><h3 style="margin:0">Curva de consumo</h3><div class="seg" id="segM"><button data-m="ms" class="on">kg MS</button><button data-m="pv">%PV</button></div></div>
     <div class="chart" id="bChart"></div><div class="legend" id="bLegend"></div><div class="note" id="bNote"></div>
-    <h3 style="margin-top:14px">Leitura de cocho</h3>
-    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+${r.temCocho?`    <h3 style="margin-top:14px">Leitura de cocho</h3>
+    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>`:""}
     <h3 style="margin-top:14px">Verificações</h3>
     <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
   $("#modal").classList.remove("hidden");
@@ -1243,13 +1267,13 @@ async function renderComparativo(){
     const datas=Object.keys(DATA[f.id].relatorios).sort((a,b)=>dateKey(b).localeCompare(dateKey(a)));
     if(!datas.length) return {f, cor:`var(${CORES[i%6]})`, vazio:true};
     const R=analisar(f.id, datas[0]);
-    const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), ms1=media(R,"ms_1d"), ms5=media(R,"ms_5d");
+    const cab=R.reduce((s,r)=>s+r.cab,0), ms=media(R,"cons_dia_ms"), vO=varCampo(R,"ms_1d"), v5=varCampo(R,"ms_5d");
     const pv=media(R,"cons_dia_pv"), esp=media(R.filter(r=>r.pvEsp!=null),"pvEsp");
     const fases=FASES.map(([a,b])=>{ const rs=R.filter(r=>r.dias_conf>=a&&r.dias_conf<=b); return rs.length?{pv:media(rs,"cons_dia_pv"),ms:media(rs,"cons_dia_ms"),n:rs.length,cab:rs.reduce((s,r)=>s+r.cab,0)}:null; });
     // MS média diária (ponderada) nos últimos 30 relatórios
     const serie=datas.slice(0,30).reverse().map(d=>{ const rs=DATA[f.id].relatorios[d]; const c=rs.reduce((s,r)=>s+r.cab,0);
       return {d, ms: rs.reduce((s,r)=>s+r.cons_dia_ms*r.cab,0)/c, pv: rs.reduce((s,r)=>s+r.cons_dia_pv*r.cab,0)/c}; });
-    return {f, cor:`var(${CORES[i%6]})`, data:datas[0], n:R.length, cab, ms, mn:media(R,"cons_dia_mn"), pv, esp, dO:(ms-ms1)/ms1*100, d5:(ms-ms5)/ms5*100,
+    return {f, cor:`var(${CORES[i%6]})`, data:datas[0], n:R.length, cab, ms, mn:media(R,"cons_dia_mn"), pv, esp, dO:vO.p, d5:v5.p, jan:(R[0]&&R[0].janela)||5,
       dias:media(R,"dias_conf"), alertas:R.filter(r=>r.sev!=="ok").length, altos:R.filter(r=>r.sev==="alto").length, fases, serie,
       defasado: (Date.now()-parseD(datas[0]).getTime())/864e5 > 2 };
   });
@@ -1258,12 +1282,12 @@ async function renderComparativo(){
     ${falhas.length?`<div class="proto">Sem internet para atualizar: ${falhas.map(esc).join(", ")}. Mostrando o que está guardado no aparelho.</div>`:""}
     <div class="card" style="margin-bottom:12px">
       <h3>Situação de cada fazenda <small>relatório mais recente · médias ponderadas por cabeças · clique na linha para abrir a fazenda</small></h3>
-      <div class="tablewrap" style="border:0"><table id="compTab"><thead><tr><th class="l">Fazenda</th><th>Relatório</th><th>Baias</th><th>Cabeças</th><th>Dias cocho</th><th>MN</th><th>MS</th><th>%PV</th><th>%PV esp.</th><th>Δ curva</th><th>Δ ontem</th><th>Δ 5d</th><th>Baias com alerta</th></tr></thead><tbody>
+      <div class="tablewrap" style="border:0"><table id="compTab"><thead><tr><th class="l">Fazenda</th><th>Relatório</th><th>Baias</th><th>Cabeças</th><th>Dias cocho</th><th>MN</th><th>MS</th><th>%PV</th><th>%PV esp.</th><th>Δ curva</th><th>Δ ontem</th><th title="média curta do relatório: 5 dias no TGC, 3 no Feed Manager">Δ média</th><th>Baias com alerta</th></tr></thead><tbody>
       ${linhas.map(l=>l.vazio?`<tr data-f="${esc(l.f.id)}"><td class="l"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${l.cor};margin-right:6px"></i><b>${esc(l.f.nome)}</b></td><td colspan="12" class="l" style="color:var(--ink2)">nenhum relatório ainda</td></tr>`:
         `<tr data-f="${esc(l.f.id)}"><td class="l"><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${l.cor};margin-right:6px"></i><b>${esc(l.f.nome)}</b></td>
         <td>${l.data}${l.defasado?` <span class="chip medio" title="sem relatório recente">atrasado</span>`:""}</td><td>${l.n}</td><td>${l.cab.toLocaleString("pt-BR")}</td><td>${fmt(l.dias,0)}</td>
         <td>${fmt(l.mn)}</td><td><b>${fmt(l.ms)}</b></td><td>${fmt(l.pv)}</td><td>${fmt(l.esp)}</td><td class="${(l.pv-l.esp)<0?"down":"up"}">${l.esp!=null?pp(l.pv-l.esp):"–"}</td>
-        <td class="${l.dO<0?"down":"up"}">${pct(l.dO)}</td><td class="${l.d5<0?"down":"up"}">${pct(l.d5)}</td>
+        <td class="${l.dO<0?"down":"up"}">${pct(l.dO)}</td><td class="${l.d5<0?"down":"up"}">${pct(l.d5)}${l.jan!==5?` <small>(${l.jan}d)</small>`:""}</td>
         <td>${l.alertas?`<span class="chip ${l.altos?"alto":"medio"}">${l.alertas} de ${l.n} (${Math.round(l.alertas/l.n*100)}%)</span>`:`<span class="chip ok">nenhuma</span>`}</td></tr>`).join("")}
       </tbody></table></div>
     </div>
@@ -1312,7 +1336,11 @@ const ERROS_FAZ = {
   email_invalido: "E-mail inválido.",
   senha_app_invalida: "A senha de app do Gmail tem 16 letras (os espaços não importam). Confira o que foi colado.",
   senha_equipe_obrigatoria: "Defina a senha que a equipe vai usar para entrar.",
-  senha_repetida: "Essa senha já é usada por outra fazenda ou pelo administrador. Escolha outra."
+  senha_repetida: "Essa senha já é usada por outra fazenda ou pelo administrador. Escolha outra.",
+  sistema_invalido: "Escolha o sistema que gera o relatório (TGC, Feed Manager ou FarmTell).",
+  nao_e_pdf: "O arquivo escolhido não é um PDF.",
+  arquivo_grande: "O PDF passa de 15 MB.",
+  fazenda_inexistente: "Fazenda não encontrada. Recarregue a lista."
 };
 const slug = s => (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40);
 let FZ_LISTA = [];
@@ -1330,7 +1358,7 @@ async function renderFazendas(){
   const st = f => {
     const ev = f.ultimo_evento;
     const emailOk = f.email && f.tem_senha_app;
-    return `<span class="chip ${f.ativa?"ok":"medio"}">${f.ativa?"ativa":"desativada"}</span> ` +
+    return `<span class="chip ${f.ativa?"ok":"medio"}">${f.ativa?"ativa":"desativada"}</span> <span class="chip sist">${esc(NOME_SIST[f.sistema||"tgc"]||f.sistema)}</span> ` +
       (emailOk ? `<span class="chip ok">e-mail configurado</span>` : `<span class="chip alto">falta ${!f.email?"e-mail":"senha de app"}</span>`) +
       (ev && ev.status!=="ok" ? ` <span class="chip alto" title="${esc(ev.detalhe||"")}">${esc(ev.status)}</span>` : "");
   };
@@ -1344,10 +1372,59 @@ async function renderFazendas(){
           <div style="margin-top:6px">${st(f)}</div>
           ${f.ultimo_evento && f.ultimo_evento.status!=="ok" ? `<div style="font-size:12px;color:var(--crit);margin-top:4px">${esc(f.ultimo_evento.detalhe||"")}</div>` : ""}
         </div>
-        <button class="btn ghost small" data-edit="${esc(f.id)}">Editar</button>
-      </div>`).join("") || `<div class="empty">Nenhuma fazenda cadastrada.</div>`}</div>`;
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <button class="btn ghost small" data-edit="${esc(f.id)}">Editar</button>
+          <button class="btn ghost small" data-up="${esc(f.id)}" title="Enviar um PDF do relatório quando ele não chegar pelo e-mail">Inserir relatório (PDF)</button>
+        </div>
+      </div>
+      <div class="up-msg" id="up-${esc(f.id)}"></div>`).join("") || `<div class="empty">Nenhuma fazenda cadastrada.</div>`}</div>`;
   $("#fzNova").onclick = ()=>formFazenda(null);
   el.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>formFazenda(FZ_LISTA.find(f=>f.id===b.dataset.edit)));
+  el.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>escolherPDF(FZ_LISTA.find(f=>f.id===b.dataset.up)));
+}
+
+/* envio manual do PDF: vai para o banco, o robô lê na próxima rodada (pedida na hora) e o app acompanha */
+function escolherPDF(f){
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/pdf,.pdf";
+  inp.onchange = ()=>{ if(inp.files[0]) enviarPDF(f, inp.files[0]); };
+  inp.click();
+}
+async function enviarPDF(f, arq){
+  const box = $("#up-"+f.id);
+  const dizer = (txt, cor) => { if(box){ box.style.color = cor||"var(--ink2)"; box.textContent = txt; } };
+  if(arq.size > 15*1024*1024) return dizer(ERROS_FAZ.arquivo_grande, "var(--crit)");
+  const sistema = NOME_SIST[f.sistema||"tgc"];
+  try{
+    dizer(`Enviando ${arq.name}…`);
+    const b64 = await new Promise((ok, erro)=>{ const fr = new FileReader();
+      fr.onload = ()=>ok(String(fr.result).split(",")[1]); fr.onerror = ()=>erro(new Error("não consegui ler o arquivo")); fr.readAsDataURL(arq); });
+    const id = await rpc("enviar_relatorio", {p_token:S.sessao.token, p_fazenda:f.id, p_nome:arq.name, p_base64:b64});
+    let ped = null;
+    const pedir = async ()=>{ try{ ped = await rpc("pedir_coleta", {p_token:S.sessao.token}); ped.t = Date.now(); }
+      catch(err){ if(err.cod==="nao_configurado") throw new ErroAPI("Arquivo guardado. O botão Atualizar não está configurado, então ele será lido na próxima rodada automática do robô.","info"); throw err; } };
+    await pedir();
+    const inicio = Date.now(), passo = (CFG.intervalo || 15000), limite = 8*60000;
+    while(Date.now() - inicio < limite){
+      dizer(`Arquivo enviado. Robô lendo o relatório do ${sistema}… (${Math.round((Date.now()-inicio)/1000)}s, leva de 1 a 3 min)`);
+      await esperar(passo);
+      const st = await rpc("situacao_upload", {p_token:S.sessao.token, p_id:id});
+      if(st && st.status && st.status !== "pendente"){
+        const ok = st.status === "ok";
+        dizer((ok ? "✓ " : "✗ ") + (st.detalhe || st.status), ok ? "var(--good)" : "var(--crit)");
+        if(ok){ await sincronizar(f.id); if(S.farm===f.id) mostrarFazenda(); }
+        return;
+      }
+      // o robô que estava rodando pode ter começado antes do envio: pede outra rodada quando o intervalo mínimo passar
+      if(ped && ped.repetido && Date.now() - ped.t > 190000) await pedir();
+      else if(ped && !ped.repetido && Date.now() - ped.t > 200000) await pedir();
+    }
+    dizer("O robô ainda não terminou. O arquivo está guardado e será lido na próxima rodada.");
+  }catch(err){
+    if(err.cod==="sessao") return alertaSessao();
+    if(err.cod==="info") return dizer(err.message);
+    const k = Object.keys(ERROS_FAZ).find(k=>err.message.includes(k));
+    dizer(k ? ERROS_FAZ[k] : err.message, "var(--crit)");
+  }
 }
 function atualizarListaSessao(){
   const ativas = FZ_LISTA.filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}));
@@ -1363,7 +1440,9 @@ function formFazenda(f){
     <label class="field"><span>Nome da fazenda</span><input type="text" id="fzNome" value="${esc(f?f.nome:"")}" placeholder="ex.: Fazenda Santa Rita"></label>
     <label class="field"><span>Código (curto, sem espaços${nova?"":" – não pode ser alterado"})</span><input type="text" id="fzId" value="${esc(f?f.id:"")}" ${nova?"":"disabled"} placeholder="gerado a partir do nome"></label>
     <label class="field"><span>Senha da equipe (para entrar no app)${nova?"":" – deixe em branco para manter a atual"}</span><input type="text" id="fzSenha" autocomplete="off" placeholder="${nova?"ex.: santarita2026":"(mantém a atual)"}"></label>
-    <label class="field"><span>E-mail que recebe o PDF do TGC</span><input type="text" id="fzEmail" inputmode="email" value="${esc(f&&f.email?f.email:"")}" placeholder="ex.: santarita.mr.report@gmail.com"></label>
+    <label class="field"><span>Sistema que gera o relatório</span><select id="fzSist">
+      ${["tgc","feedmanager","farmtell"].map(s=>`<option value="${s}" ${(f?f.sistema||"tgc":"tgc")===s?"selected":""}>${NOME_SIST[s]}${s==="farmtell"?" (em breve)":""}</option>`).join("")}</select></label>
+    <label class="field"><span>E-mail que recebe o PDF do relatório</span><input type="text" id="fzEmail" inputmode="email" value="${esc(f&&f.email?f.email:"")}" placeholder="ex.: santarita.mr.report@gmail.com"></label>
     <label class="field"><span>Senha de app do Gmail (16 letras)${!nova&&f.tem_senha_app?" – guardada ✓, deixe em branco para manter":""}</span>
       <input type="password" id="fzApp" autocomplete="new-password" placeholder="${!nova&&f.tem_senha_app?"•••• •••• •••• ••••":"abcd efgh ijkl mnop"}"></label>
     <p class="help" style="font-size:12px;color:var(--ink2);margin:-4px 0 10px">Gere em myaccount.google.com/apppasswords, logado no e-mail da fazenda (precisa da verificação em 2 etapas). A senha vai direto para o cofre criptografado do banco e não pode ser vista depois, nem aqui.</p>
@@ -1389,7 +1468,7 @@ function formFazenda(f){
     $("#fzSalvar").disabled = true; msg.style.color = "var(--ink2)"; msg.textContent = "Salvando…";
     try{
       const r = await rpc("adm_salvar_fazenda", {p_token:S.sessao.token, p_id:id, p_nome:$("#fzNome").value, p_senha_equipe:$("#fzSenha").value.trim(),
-        p_email:$("#fzEmail").value.trim(), p_senha_app:app, p_remetente:$("#fzRem").value.trim(), p_ativa: nova ? true : $("#fzAtiva").checked});
+        p_email:$("#fzEmail").value.trim(), p_senha_app:app, p_remetente:$("#fzRem").value.trim(), p_ativa: nova ? true : $("#fzAtiva").checked, p_sistema:$("#fzSist").value});
       await renderFazendas();
       const m = document.createElement("div"); m.className="proto"; m.style.background="var(--good-bg)";
       m.innerHTML = r.criada ? `<b>${esc(nomeDigitado)}</b> cadastrada. Toque em <b>Atualizar</b> para o robô conferir o e-mail agora, ou aguarde a rodada das 21h30.` : "Alterações salvas.";

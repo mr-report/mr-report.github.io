@@ -33,14 +33,15 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 
-from leitor_tgc import RelatorioInvalido, ler
+from leitores import NOMES, RelatorioInvalido, SistemaErrado, ler
 
 TZ = ZoneInfo("America/Sao_Paulo")
 COLUNAS = ["curral", "lote", "cab", "ct", "sub_contrato", "dt_entrada", "dias_conf",
            "ms_5d", "mn_5d", "ms_1d", "mn_1d", "ms_med", "mn_med",
            "racao", "racao_dias", "racao_tipo_dias", "peso_entrada", "peso_atual_prj",
            "ims_pv_5d", "ims_pv_1d", "ims_pv_med", "cons_dia_mn", "cons_dia_ms", "cons_dia_pv",
-           "dt_abate", "cocho_d1", "cocho_d2", "cocho_d3"]
+           "dt_abate", "cocho_d1", "cocho_d2", "cocho_d3",
+           "setor", "raca", "mortes", "dias_trato", "peso_abate_prev", "gpd"]
 
 
 def hoje() -> date:
@@ -77,12 +78,14 @@ def gravar(conn, fazenda_id: str, meta: dict, baias: list[dict], arquivo: str, m
         if atual and message_id and atual[0] == message_id:
             return "repetido"
         cur.execute("""
-            insert into public.relatorios(fazenda_id, data_ref, confinamento, arquivo, message_id, n_baias, n_cab, processado_em)
-            values (%s,%s,%s,%s,%s,%s,%s, now())
+            insert into public.relatorios(fazenda_id, data_ref, confinamento, arquivo, message_id, n_baias, n_cab,
+                                          sistema, janela_media, n_sem_trato, processado_em)
+            values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
             on conflict (fazenda_id, data_ref) do update set confinamento=excluded.confinamento, arquivo=excluded.arquivo,
-              message_id=excluded.message_id, n_baias=excluded.n_baias, n_cab=excluded.n_cab, processado_em=now()""",
+              message_id=excluded.message_id, n_baias=excluded.n_baias, n_cab=excluded.n_cab, sistema=excluded.sistema,
+              janela_media=excluded.janela_media, n_sem_trato=excluded.n_sem_trato, processado_em=now()""",
                     (fazenda_id, meta["data_ref"], meta.get("confinamento"), arquivo, message_id,
-                     meta["n_baias"], meta["n_cab"]))
+                     meta["n_baias"], meta["n_cab"], meta.get("sistema", "tgc"), meta.get("janela_media", 5), meta.get("sem_trato")))
         cur.execute("delete from public.baias_dia where fazenda_id=%s and data_ref=%s", (fazenda_id, meta["data_ref"]))
         cols = ["fazenda_id", "data_ref"] + COLUNAS
         sql = f"insert into public.baias_dia({','.join(cols)}) values ({','.join(['%s'] * len(cols))})"
@@ -96,10 +99,10 @@ def lista_fazendas(conn) -> list[dict]:
     lista = []
     try:
         with conn.cursor() as cur:
-            cur.execute("select id, email, senha_app, remetente from public.robo_fazendas()")
-            lista = [{"id": i, "email": e, "senha_app": s, "remetente": r or ""} for i, e, s, r in cur.fetchall()]
-    except psycopg.errors.UndefinedFunction:
-        conn.rollback()          # 04_fazendas_no_app.sql ainda não instalado: usa só o secret
+            cur.execute("select id, email, senha_app, remetente, sistema from public.robo_fazendas()")
+            lista = [{"id": i, "email": e, "senha_app": s, "remetente": r or "", "sistema": si} for i, e, s, r, si in cur.fetchall()]
+    except (psycopg.errors.UndefinedFunction, psycopg.errors.DatatypeMismatch, psycopg.errors.UndefinedColumn):
+        conn.rollback()          # 04/05 ainda não instalados: usa só o secret (sistema TGC)
     try:
         extra = json.loads(os.environ.get("FAZENDAS") or "[]")
     except json.JSONDecodeError as e:
@@ -107,6 +110,17 @@ def lista_fazendas(conn) -> list[dict]:
         extra = []
     ids = {f["id"] for f in lista}
     return lista + [f for f in extra if f.get("id") not in ids]
+
+
+def sistema_da_fazenda(conn, fid) -> str:
+    try:
+        with conn.cursor() as cur:
+            cur.execute("select sistema from public.fazendas where id=%s", (fid,))
+            r = cur.fetchone()
+            return (r[0] if r else None) or "tgc"
+    except psycopg.errors.UndefinedColumn:
+        conn.rollback()
+        return "tgc"
 
 
 def fazendas_cadastradas(conn) -> dict:
@@ -184,7 +198,11 @@ def coletar(conn, fazendas: list[dict], dias: int) -> int:
                     n["ignorado"] += 1
                     continue
                 try:
-                    meta, baias = ler(conteudo)
+                    meta, baias = ler(conteudo, f.get("sistema") or sistema_da_fazenda(conn, fid))
+                except SistemaErrado as e:      # relatório de outro sistema: não grava e avisa uma vez
+                    n["ignorado"] += 1
+                    log(conn, fid, "erro", f"PDF '{nome}': {e}", ref=mid)
+                    continue
                 except RelatorioInvalido as e:
                     n["ignorado"] += 1
                     log(conn, fid, "ignorado", f"PDF '{nome}' de {remetente} não é um relatório válido: {e}", ref=mid)
@@ -196,7 +214,7 @@ def coletar(conn, fazendas: list[dict], dias: int) -> int:
                 r = gravar(conn, fid, meta, baias, nome, mid)
                 n[r] += 1
                 if r != "repetido":
-                    log(conn, fid, "ok", f"relatório de {meta['data_ref']} ({r}): {meta['n_baias']} baias, "
+                    log(conn, fid, "ok", f"relatório {NOMES[meta['sistema']]} de {meta['data_ref']} ({r}): {meta['n_baias']} baias, "
                                          f"{meta['n_cab']} cab – '{nome}'")
             print(f"fazenda {fazendas.index(f) + 1}: {n}" if _PUBLICO else f"{fid}: {n}")
         except imaplib.IMAP4.error as e:
@@ -206,6 +224,38 @@ def coletar(conn, fazendas: list[dict], dias: int) -> int:
             erros += 1
             log(conn, fid, "erro", f"{type(e).__name__}: {e}")
     return erros
+
+
+def processar_uploads(conn) -> int:
+    """PDFs enviados pelo app (botão "Inserir relatório"). Devolve quantos foram processados."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""select u.id, u.fazenda_id, u.nome, u.conteudo, f.sistema
+                           from public.uploads u join public.fazendas f on f.id = u.fazenda_id
+                           where u.status = 'pendente' order by u.id""")
+            pendentes = cur.fetchall()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+        conn.rollback()            # 05_varios_sistemas.sql ainda não instalado
+        return 0
+    for uid, fid, nome, conteudo, sistema in pendentes:
+        data_ref, status = None, "erro"
+        try:
+            meta, baias = ler(bytes(conteudo), sistema)
+            r = gravar(conn, fid, meta, baias, nome, f"upload:{uid}")
+            data_ref, status = meta["data_ref"], "ok"
+            dref = date.fromisoformat(data_ref).strftime("%d/%m/%Y")
+            detalhe = (f"relatório {NOMES[meta['sistema']]} de {dref} gravado ({'novo' if r == 'novo' else 'substituiu o anterior do mesmo dia'}): "
+                       f"{meta['n_baias']} baias, {meta['n_cab']} cab")
+        except (RelatorioInvalido, SistemaErrado) as e:
+            detalhe = str(e)
+        except Exception as e:
+            detalhe = f"falha ao ler o arquivo: {type(e).__name__}: {e}"
+        with conn.cursor() as cur:
+            cur.execute("update public.uploads set status=%s, detalhe=%s, data_ref=%s, processado_em=now() where id=%s",
+                        (status, detalhe[:2000], data_ref, uid))
+        conn.commit()
+        log(conn, fid, status, f"[enviado pelo app] '{nome}': {detalhe}")
+    return len(pendentes)
 
 
 def verificar(conn, fazendas: list[dict]) -> int:
@@ -239,17 +289,19 @@ def main():
     with psycopg.connect(url, connect_timeout=20, prepare_threshold=None) as conn:
         if a.arquivo:
             with open(a.arquivo, "rb") as fh:
-                meta, baias = ler(fh.read())
+                meta, baias = ler(fh.read(), sistema_da_fazenda(conn, a.fazenda))
             r = gravar(conn, a.fazenda, meta, baias, os.path.basename(a.arquivo), f"arquivo:{os.path.basename(a.arquivo)}")
             log(conn, a.fazenda, "ok", f"importado manualmente {meta['data_ref']} ({r}): {meta['n_baias']} baias")
             return
         fazendas = lista_fazendas(conn)
-        if not fazendas:
-            log(conn, None, "erro", "nenhuma fazenda com e-mail configurado (cadastre na aba Fazendas do app)")
-            sys.exit(1)
         if a.verificar:
             sys.exit(1 if verificar(conn, fazendas) else 0)
-        erros = coletar(conn, fazendas, a.dias)
+        n_up = processar_uploads(conn)          # relatórios enviados pelo app entram primeiro
+        if not fazendas and not n_up:
+            log(conn, None, "erro", "nenhuma fazenda com e-mail configurado (cadastre na aba Fazendas do app)")
+            log(conn, None, "rodada", "fim da rodada (sem fazendas)")
+            sys.exit(1)
+        erros = coletar(conn, fazendas, a.dias) if fazendas else 0
         # marca o fim da rodada: o botão "Atualizar" do app espera por este registro
         log(conn, None, "rodada", f"fim da rodada ({erros} erro(s))")
         sys.exit(1 if erros else 0)
