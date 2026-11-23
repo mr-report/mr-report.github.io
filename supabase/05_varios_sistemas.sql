@@ -141,7 +141,8 @@ declare s public.sessoes; i bigint; b bytea;
 begin
   s := public._sessao(p_token);
   if s.token is null then raise exception 'sessao_expirada' using errcode = '28000'; end if;
-  if s.fazenda_id is not null then raise exception 'sem_permissao' using errcode = '42501'; end if;
+  -- a equipe da fazenda envia só para a própria fazenda; o administrador, para qualquer uma
+  if s.fazenda_id is not null and s.fazenda_id <> p_fazenda then raise exception 'sem_permissao' using errcode = '42501'; end if;
   if not exists (select 1 from public.fazendas where id = p_fazenda) then raise exception 'fazenda_inexistente' using errcode = 'P0001'; end if;
   b := decode(p_base64, 'base64');
   if length(b) > 15 * 1024 * 1024 then raise exception 'arquivo_grande' using errcode = 'P0001'; end if;
@@ -157,9 +158,8 @@ declare s public.sessoes;
 begin
   s := public._sessao(p_token);
   if s.token is null then raise exception 'sessao_expirada' using errcode = '28000'; end if;
-  if s.fazenda_id is not null then raise exception 'sem_permissao' using errcode = '42501'; end if;
   return (select jsonb_build_object('status', status, 'detalhe', detalhe, 'data_ref', data_ref, 'processado_em', processado_em)
-          from public.uploads where id = p_id);
+          from public.uploads where id = p_id and (s.fazenda_id is null or fazenda_id = s.fazenda_id));
 end $$;
 
 revoke execute on function public.adm_salvar_fazenda(text, text, text, text, text, text, text, boolean, text) from public, anon, authenticated;

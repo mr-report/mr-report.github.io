@@ -73,6 +73,7 @@ header .btn.ghost{color:#fff;border-color:rgba(255,255,255,.35)}
 .sync .off{background:var(--warn-bg);color:#7a5600;border-radius:999px;padding:1px 8px;font-weight:600}
 .sync b{color:#fff}
 .sync button{background:var(--secondary);border:0;color:var(--secondary-ink);cursor:pointer;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+.sync #btnPDF{background:transparent;color:#fff;box-shadow:inset 0 0 0 1px var(--secondary)}
 nav{display:flex;gap:2px;max-width:1280px;margin:0 auto;padding:0 10px;overflow-x:auto;scrollbar-width:none}
 nav button{background:none;border:0;padding:10px 12px 9px;border-bottom:3px solid transparent;color:rgba(255,255,255,.72);cursor:pointer;white-space:nowrap;font-weight:500}
 nav button.on{color:#fff;border-bottom-color:var(--secondary);font-weight:700}
@@ -632,8 +633,10 @@ function renderSync(){
     (s.carregando ? esc(s.texto || "Atualizando…") : quando ? "Atualizado em " + quando.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"}) + " às " + quando.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : "Ainda sem dados neste aparelho") +
     (s.off ? ' <span class="off">offline</span>' : "") + (s.erro ? ' <span class="off">'+esc(s.erro)+'</span>' : "") +
     (s.info && !s.carregando ? ' · <b>'+esc(s.info)+'</b>' : "") +
-    (s.carregando || buscando ? "" : ' · <button id="btnSync" title="Pede ao robô para conferir o e-mail agora">Atualizar</button>');
+    (s.carregando || buscando ? "" : ' · <button id="btnSync" title="Pede ao robô para conferir o e-mail agora">Atualizar</button>' +
+      (S.farm ? ' <button id="btnPDF" title="Enviar o PDF do relatório quando ele não chegar pelo e-mail">Inserir PDF</button>' : ""));
   const b = $("#btnSync"); if(b) b.onclick = atualizarAgora;
+  const bp = $("#btnPDF"); if(bp) bp.onclick = ()=>escolherPDF({id:S.farm, sistema:(SRV[S.farm]&&SRV[S.farm].sistema)||"tgc"}, true);
 }
 
 /* Botão Atualizar: pede ao robô para conferir o e-mail agora e espera o resultado */
@@ -1384,14 +1387,23 @@ async function renderFazendas(){
 }
 
 /* envio manual do PDF: vai para o banco, o robô lê na próxima rodada (pedida na hora) e o app acompanha */
-function escolherPDF(f){
+function escolherPDF(f, noTopo){
+  if(buscando) return;
   const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/pdf,.pdf";
-  inp.onchange = ()=>{ if(inp.files[0]) enviarPDF(f, inp.files[0]); };
+  inp.onchange = ()=>{ if(inp.files[0]) enviarPDF(f, inp.files[0], noTopo); };
   inp.click();
 }
-async function enviarPDF(f, arq){
-  const box = $("#up-"+f.id);
-  const dizer = (txt, cor) => { if(box){ box.style.color = cor||"var(--ink2)"; box.textContent = txt; } };
+async function enviarPDF(f, arq, noTopo){
+  const box = noTopo ? null : $("#up-"+f.id);
+  let fim = null;
+  const dizer = (txt, cor) => {
+    if(noTopo){ fim = txt; syncMsg = cor ? (cor==="var(--good)" ? {info:txt} : {erro:txt}) : {carregando:true, texto:txt}; renderSync(); }
+    else if(box){ box.style.color = cor||"var(--ink2)"; box.textContent = txt; } };
+  if(noTopo) buscando = true;
+  try{ await enviarPDF2(f, arq, dizer); }
+  finally{ if(noTopo){ buscando = false; if(syncMsg.carregando) syncMsg = {info:fim}; renderSync(); } }
+}
+async function enviarPDF2(f, arq, dizer){
   if(arq.size > 15*1024*1024) return dizer(ERROS_FAZ.arquivo_grande, "var(--crit)");
   const sistema = NOME_SIST[f.sistema||"tgc"];
   try{
@@ -1418,10 +1430,10 @@ async function enviarPDF(f, arq){
       if(ped && ped.repetido && Date.now() - ped.t > 190000) await pedir();
       else if(ped && !ped.repetido && Date.now() - ped.t > 200000) await pedir();
     }
-    dizer("O robô ainda não terminou. O arquivo está guardado e será lido na próxima rodada.");
+    dizer("O robô ainda não terminou. O arquivo está guardado e será lido na próxima rodada.", "var(--good)");
   }catch(err){
     if(err.cod==="sessao") return alertaSessao();
-    if(err.cod==="info") return dizer(err.message);
+    if(err.cod==="info") return dizer(err.message, "var(--good)");
     const k = Object.keys(ERROS_FAZ).find(k=>err.message.includes(k));
     dizer(k ? ERROS_FAZ[k] : err.message, "var(--crit)");
   }

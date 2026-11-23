@@ -103,7 +103,7 @@ pedir ao GitHub que rode o robô.
 1. No Supabase (SQL Editor), rode `supabase/05_varios_sistemas.sql` inteiro, uma vez.
 2. Em **Fazendas (ADM)**, cada fazenda tem o campo **Sistema que gera o relatório**. O robô confere se o PDF que
    chegou é mesmo desse sistema; se não for, registra o erro na fazenda e não grava nada.
-3. **Inserir relatório (PDF)**: envia um PDF pelo próprio app (só o administrador). O arquivo fica guardado no banco,
+3. **Inserir PDF** (ao lado de Atualizar, para todos) e **Inserir relatório (PDF)** (aba Fazendas, ADM): envia um PDF pelo próprio app. A equipe só envia para a própria fazenda. O arquivo fica guardado no banco,
    o robô é acionado na hora e o resultado aparece embaixo da fazenda em 1 a 3 minutos.
 4. Diferenças por sistema:
    - TGC: média curta de 5 dias, consumo de ontem e leitura de cocho vêm no relatório.
