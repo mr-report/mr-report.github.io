@@ -109,7 +109,8 @@ pedir ao GitHub que rode o robô.
    - TGC: média curta de 5 dias, consumo de ontem e leitura de cocho vêm no relatório.
    - Feed Manager: média curta de 3 dias; não traz consumo de ontem (o app usa o relatório do dia anterior, quando
      existe) nem leitura de cocho (as verificações de escore não aparecem). Baias sem trato são ignoradas.
-   - FarmTell: leitor em preparação.
+   - FarmTell ("Relatório Lotes Ativos"): média curta de 3 dias (inclui o dia), consumo do dia anterior e escore
+     D-2, D-1 e do dia (notas de -2 a 2; negativa = cocho limpo). O "Critério" (nome do dono) é ignorado.
 
 ## Manutenção
 - **Nova fazenda**: no app, aba **Fazendas (ADM) → + Nova fazenda**. Preencha nome, senha da equipe, e-mail e senha de app.

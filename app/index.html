@@ -415,6 +415,8 @@ async function sincronizar(fid){
   return novo;
 }
 
+/* nomes das três leituras de cocho: TGC traz D-3, D-2 e ontem; FarmTell, D-2, D-1 e a do dia */
+const ROT_COCHO = r => r.sistema==="farmtell" ? ["D-2","D-1","hoje"] : ["D-3","D-2","ontem"];
 /* dias da "média curta" do relatório escolhido: 5 no TGC, 3 no Feed Manager/FarmTell */
 const J = () => { const i = S.farm && DATA[S.farm] && DATA[S.farm].info && DATA[S.farm].info[S.data]; return (i && i.janela) || 5; };
 /* ---------- cadastros de exemplo ---------- */
@@ -435,7 +437,10 @@ function defaultConfig(farmId){
   [...dietas].sort().forEach(d=>limites[d]={...limites["Padrão"]});
   return {
     categorias, curva, catInfoTitulo:"Informações adicionais", catInfo:{},
-    escore:[{nota:0,ajuste:10},{nota:0.5,ajuste:5},{nota:1,ajuste:0},{nota:1.5,ajuste:-5},{nota:2,ajuste:-10},{nota:3,ajuste:-15}],
+    // FarmTell usa notas de -2 a 2 (negativa = cocho limpo, pede aumento); TGC, de 0 a 3
+    escore: ((SRV[farmId]&&SRV[farmId].sistema)==="farmtell")
+      ? [{nota:-2,ajuste:4},{nota:-1,ajuste:2},{nota:0,ajuste:0},{nota:1,ajuste:-2},{nota:2,ajuste:-4}]
+      : [{nota:0,ajuste:10},{nota:0.5,ajuste:5},{nota:1,ajuste:0},{nota:1.5,ajuste:-5},{nota:2,ajuste:-10},{nota:3,ajuste:-15}],
     limites
   };
 }
@@ -531,7 +536,7 @@ function analisar(farmId, data){
     if(r.dOntem!=null && Math.abs(dif) > L.escore)
       probs.push({sev: Math.sign(r.dOntem)!==Math.sign(r.ajuste) && r.ajuste!==0 ? "alto":"medio",
         titulo:"Escore × consumo: variação diferente da que a nota pedia",
-        texto:`Nota de ontem ${fmt(r.cocho_d1,1)} pedia ajuste de ${pct(r.ajuste,0)}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
+        texto:`Nota ${r.sistema==="farmtell"?"do dia":"de ontem"} ${fmt(r.cocho_d1,1)} pedia ajuste de ${pct(r.ajuste,0)}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
     if(r.dCurva!=null){
       if(r.ajuste>0 && r.dCurva > L.curva)
         probs.push({sev:"medio",titulo:"Escore × curva: nota pede aumento, mas a baia já está acima da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} acima do esperado. Conferir a leitura do cocho.`,curto:"escore × curva"});
@@ -914,7 +919,7 @@ function renderVistoria(){
       </section>
 ${r.temCocho?`      <section class="vt-sec">
         <h3>Leitura de cocho</h3>
-        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
       </section>`:""}
       <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
         <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
@@ -1227,7 +1232,7 @@ function openBaia(cur){
     <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><h3 style="margin:0">Curva de consumo</h3><div class="seg" id="segM"><button data-m="ms" class="on">kg MS</button><button data-m="pv">%PV</button></div></div>
     <div class="chart" id="bChart"></div><div class="legend" id="bLegend"></div><div class="note" id="bNote"></div>
 ${r.temCocho?`    <h3 style="margin-top:14px">Leitura de cocho</h3>
-    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>D-3</small></span><span>${fmt(r.cocho_d2,1)}<small>D-2</small></span><span>${fmt(r.cocho_d1,1)}<small>ontem</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>`:""}
+    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>`:""}
     <h3 style="margin-top:14px">Verificações</h3>
     <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
   $("#modal").classList.remove("hidden");
@@ -1453,7 +1458,7 @@ function formFazenda(f){
     <label class="field"><span>Código (curto, sem espaços${nova?"":" – não pode ser alterado"})</span><input type="text" id="fzId" value="${esc(f?f.id:"")}" ${nova?"":"disabled"} placeholder="gerado a partir do nome"></label>
     <label class="field"><span>Senha da equipe (para entrar no app)${nova?"":" – deixe em branco para manter a atual"}</span><input type="text" id="fzSenha" autocomplete="off" placeholder="${nova?"ex.: santarita2026":"(mantém a atual)"}"></label>
     <label class="field"><span>Sistema que gera o relatório</span><select id="fzSist">
-      ${["tgc","feedmanager","farmtell"].map(s=>`<option value="${s}" ${(f?f.sistema||"tgc":"tgc")===s?"selected":""}>${NOME_SIST[s]}${s==="farmtell"?" (em breve)":""}</option>`).join("")}</select></label>
+      ${["tgc","feedmanager","farmtell"].map(s=>`<option value="${s}" ${(f?f.sistema||"tgc":"tgc")===s?"selected":""}>${NOME_SIST[s]}</option>`).join("")}</select></label>
     <label class="field"><span>E-mail que recebe o PDF do relatório</span><input type="text" id="fzEmail" inputmode="email" value="${esc(f&&f.email?f.email:"")}" placeholder="ex.: santarita.mr.report@gmail.com"></label>
     <label class="field"><span>Senha de app do Gmail (16 letras)${!nova&&f.tem_senha_app?" – guardada ✓, deixe em branco para manter":""}</span>
       <input type="password" id="fzApp" autocomplete="new-password" placeholder="${!nova&&f.tem_senha_app?"•••• •••• •••• ••••":"abcd efgh ijkl mnop"}"></label>

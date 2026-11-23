@@ -1,6 +1,6 @@
 """Escolhe o leitor certo para cada relatório e padroniza o resultado.
 
-Sistemas: "tgc" (TGC), "feedmanager" (Feed Manager) e "farmtell" (FarmTell – em construção).
+Sistemas: "tgc" (TGC), "feedmanager" (Feed Manager) e "farmtell" (FarmTell).
 Cada leitor devolve (meta, baias) no mesmo formato; meta sempre traz "sistema" e
 "janela_media" (quantos dias tem a média curta: 5 no TGC, 3 no Feed Manager).
 """
@@ -10,6 +10,7 @@ import io
 
 import pdfplumber
 
+import leitor_farmtell
 import leitor_feedmanager
 import leitor_tgc
 
@@ -35,6 +36,8 @@ def detectar(conteudo: bytes) -> str | None:
         return "tgc"
     if "Controle de Lotes Ativos" in txt and "Posição em" in txt:
         return "feedmanager"
+    if "LOTES ATIVOS" in txt and "Dia Anterior" in txt and "Escore" in txt:
+        return "farmtell"
     return None
 
 
@@ -52,8 +55,8 @@ def ler(conteudo: bytes, sistema_esperado: str | None = None) -> tuple[dict, lis
         elif sist == "feedmanager":
             meta, baias = leitor_feedmanager.ler(conteudo)
         else:
-            raise RelatorioInvalido("o leitor do FarmTell ainda não está disponível")
-    except (leitor_tgc.RelatorioInvalido, leitor_feedmanager.RelatorioInvalido) as e:
+            meta, baias = leitor_farmtell.ler(conteudo)
+    except (leitor_tgc.RelatorioInvalido, leitor_feedmanager.RelatorioInvalido, leitor_farmtell.RelatorioInvalido) as e:
         raise RelatorioInvalido(str(e)) from None
     for b in baias:                       # lote pode ter letras (Feed Manager): guarda sempre como texto
         b["lote"] = str(b["lote"]) if b.get("lote") is not None else None
