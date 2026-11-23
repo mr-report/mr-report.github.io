@@ -69,6 +69,7 @@ header select option{color:#0d1b2e;font-size:15px;font-weight:400}
 .brand select{max-width:none;min-width:0;flex:0 1 auto;font-size:17px;font-weight:700;background:rgba(255,255,255,.08);border:1px solid rgba(204,209,1,.55);padding:4px 30px 4px 10px;-webkit-appearance:none;appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23CCD101' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;text-overflow:ellipsis;cursor:pointer}
 header .btn.ghost{color:#fff;border-color:rgba(255,255,255,.35)}
+.sync b,.sync .off{white-space:pre-line}
 .sync{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.8);max-width:1280px;margin:0 auto;padding:0 16px 6px}
 .sync .off{background:var(--warn-bg);color:#7a5600;border-radius:999px;padding:1px 8px;font-weight:600}
 .sync b{color:#fff}
@@ -639,7 +640,7 @@ function renderSync(){
     (s.off ? ' <span class="off">offline</span>' : "") + (s.erro ? ' <span class="off">'+esc(s.erro)+'</span>' : "") +
     (s.info && !s.carregando ? ' · <b>'+esc(s.info)+'</b>' : "") +
     (s.carregando || buscando ? "" : ' · <button id="btnSync" title="Pede ao robô para conferir o e-mail agora">Atualizar</button>' +
-      (S.farm ? ' <button id="btnPDF" title="Enviar o PDF do relatório quando ele não chegar pelo e-mail">Inserir PDF</button>' : ""));
+      (S.farm ? ' <button id="btnPDF" title="Enviar um ou vários PDFs de relatório (quando não chegarem pelo e-mail)">Inserir PDF</button>' : ""));
   const b = $("#btnSync"); if(b) b.onclick = atualizarAgora;
   const bp = $("#btnPDF"); if(bp) bp.onclick = ()=>escolherPDF({id:S.farm, sistema:(SRV[S.farm]&&SRV[S.farm].sistema)||"tgc"}, true);
 }
@@ -1382,7 +1383,7 @@ async function renderFazendas(){
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
           <button class="btn ghost small" data-edit="${esc(f.id)}">Editar</button>
-          <button class="btn ghost small" data-up="${esc(f.id)}" title="Enviar um PDF do relatório quando ele não chegar pelo e-mail">Inserir relatório (PDF)</button>
+          <button class="btn ghost small" data-up="${esc(f.id)}" title="Enviar um ou vários PDFs de relatório (quando não chegarem pelo e-mail)">Inserir relatórios (PDF)</button>
         </div>
       </div>
       <div class="up-msg" id="up-${esc(f.id)}"></div>`).join("") || `<div class="empty">Nenhuma fazenda cadastrada.</div>`}</div>`;
@@ -1394,53 +1395,72 @@ async function renderFazendas(){
 /* envio manual do PDF: vai para o banco, o robô lê na próxima rodada (pedida na hora) e o app acompanha */
 function escolherPDF(f, noTopo){
   if(buscando) return;
-  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/pdf,.pdf";
-  inp.onchange = ()=>{ if(inp.files[0]) enviarPDF(f, inp.files[0], noTopo); };
+  const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/pdf,.pdf"; inp.multiple = true;
+  inp.onchange = ()=>{ if(inp.files.length) enviarPDF(f, [...inp.files], noTopo); };
   inp.click();
 }
-async function enviarPDF(f, arq, noTopo){
+async function enviarPDF(f, arqs, noTopo){
   const box = noTopo ? null : $("#up-"+f.id);
   let fim = null;
   const dizer = (txt, cor) => {
     if(noTopo){ fim = txt; syncMsg = cor ? (cor==="var(--good)" ? {info:txt} : {erro:txt}) : {carregando:true, texto:txt}; renderSync(); }
-    else if(box){ box.style.color = cor||"var(--ink2)"; box.textContent = txt; } };
+    else if(box){ box.style.color = cor||"var(--ink2)"; box.style.whiteSpace = "pre-line"; box.textContent = txt; } };
   if(noTopo) buscando = true;
-  try{ await enviarPDF2(f, arq, dizer); }
+  try{ await enviarPDF2(f, arqs, dizer); }
   finally{ if(noTopo){ buscando = false; if(syncMsg.carregando) syncMsg = {info:fim}; renderSync(); } }
 }
-async function enviarPDF2(f, arq, dizer){
-  if(arq.size > 15*1024*1024) return dizer(ERROS_FAZ.arquivo_grande, "var(--crit)");
-  const sistema = NOME_SIST[f.sistema||"tgc"];
+const lerBase64 = arq => new Promise((ok, erro)=>{ const fr = new FileReader();
+  fr.onload = ()=>ok(String(fr.result).split(",")[1]); fr.onerror = ()=>erro(new Error("não consegui ler o arquivo")); fr.readAsDataURL(arq); });
+const msgErro = err => { const k = Object.keys(ERROS_FAZ).find(k=>err.message.includes(k)); return k ? ERROS_FAZ[k] : err.message; };
+/* envia um ou vários PDFs, pede uma rodada ao robô e acompanha cada arquivo até ser lido */
+async function enviarPDF2(f, arqs, dizer){
+  const sistema = NOME_SIST[f.sistema||"tgc"], n = arqs.length;
+  const nomeCurto = s => s.length > 40 ? s.slice(0,37)+"…" : s;
+  const enviados = [], falhas = [];
   try{
-    dizer(`Enviando ${arq.name}…`);
-    const b64 = await new Promise((ok, erro)=>{ const fr = new FileReader();
-      fr.onload = ()=>ok(String(fr.result).split(",")[1]); fr.onerror = ()=>erro(new Error("não consegui ler o arquivo")); fr.readAsDataURL(arq); });
-    const id = await rpc("enviar_relatorio", {p_token:S.sessao.token, p_fazenda:f.id, p_nome:arq.name, p_base64:b64});
+    for(const [i, arq] of arqs.entries()){
+      dizer(n>1 ? `Enviando ${i+1} de ${n}: ${nomeCurto(arq.name)}…` : `Enviando ${arq.name}…`);
+      if(arq.size > 15*1024*1024){ falhas.push(`${nomeCurto(arq.name)}: ${ERROS_FAZ.arquivo_grande}`); continue; }
+      try{ enviados.push({nome:arq.name, id: await rpc("enviar_relatorio", {p_token:S.sessao.token, p_fazenda:f.id, p_nome:arq.name, p_base64: await lerBase64(arq)})}); }
+      catch(err){ if(err.cod==="sessao" || err.cod==="offline") throw err; falhas.push(`${nomeCurto(arq.name)}: ${msgErro(err)}`); }
+    }
+    if(!enviados.length) return dizer("✗ " + falhas.join("\n"), "var(--crit)");
     let ped = null;
     const pedir = async ()=>{ try{ ped = await rpc("pedir_coleta", {p_token:S.sessao.token}); ped.t = Date.now(); }
-      catch(err){ if(err.cod==="nao_configurado") throw new ErroAPI("Arquivo guardado. O botão Atualizar não está configurado, então ele será lido na próxima rodada automática do robô.","info"); throw err; } };
+      catch(err){ if(err.cod==="nao_configurado") throw new ErroAPI((enviados.length>1?"Arquivos guardados":"Arquivo guardado")+". O botão Atualizar não está configurado, então a leitura fica para a próxima rodada automática do robô.","info"); throw err; } };
     await pedir();
     const inicio = Date.now(), passo = (CFG.intervalo || 15000), limite = 8*60000;
+    const res = {};
     while(Date.now() - inicio < limite){
-      dizer(`Arquivo enviado. Robô lendo o relatório do ${sistema}… (${Math.round((Date.now()-inicio)/1000)}s, leva de 1 a 3 min)`);
+      const prontos = Object.keys(res).length;
+      dizer(`${enviados.length>1 ? enviados.length+" arquivos enviados" : "Arquivo enviado"}. Robô lendo ${enviados.length>1?"os relatórios":"o relatório"} do ${sistema}…` +
+        (enviados.length>1 ? ` ${prontos} de ${enviados.length} prontos` : "") + ` (${Math.round((Date.now()-inicio)/1000)}s, leva de 1 a 3 min)`);
       await esperar(passo);
-      const st = await rpc("situacao_upload", {p_token:S.sessao.token, p_id:id});
-      if(st && st.status && st.status !== "pendente"){
-        const ok = st.status === "ok";
-        dizer((ok ? "✓ " : "✗ ") + (st.detalhe || st.status), ok ? "var(--good)" : "var(--crit)");
-        if(ok){ await sincronizar(f.id); if(S.farm===f.id) mostrarFazenda(); }
-        return;
+      for(const e of enviados) if(!res[e.id]){
+        const st = await rpc("situacao_upload", {p_token:S.sessao.token, p_id:e.id});
+        if(st && st.status && st.status !== "pendente") res[e.id] = st;
       }
+      if(Object.keys(res).length === enviados.length) break;
       // o robô que estava rodando pode ter começado antes do envio: pede outra rodada quando o intervalo mínimo passar
-      if(ped && ped.repetido && Date.now() - ped.t > 190000) await pedir();
-      else if(ped && !ped.repetido && Date.now() - ped.t > 200000) await pedir();
+      if(ped && Date.now() - ped.t > (ped.repetido ? 190000 : 200000)) await pedir();
     }
-    dizer("O robô ainda não terminou. O arquivo está guardado e será lido na próxima rodada.", "var(--good)");
+    const oks = enviados.filter(e=>res[e.id] && res[e.id].status==="ok");
+    enviados.filter(e=>res[e.id] && res[e.id].status!=="ok").forEach(e=>falhas.push(`${nomeCurto(e.nome)}: ${res[e.id].detalhe || res[e.id].status}`));
+    const pend = enviados.filter(e=>!res[e.id]).length;
+    if(oks.length){ await sincronizar(f.id); if(S.farm===f.id) mostrarFazenda(); }
+    let txt;
+    if(n===1 && oks.length) txt = "✓ " + (res[oks[0].id].detalhe || "relatório gravado");
+    else if(oks.length){
+      const datas = oks.map(e=>res[e.id].data_ref).filter(Boolean).sort().map(d=>isoParaBR(d).slice(0,5));
+      txt = `✓ ${oks.length} de ${n} relatórios gravados${datas.length?": "+datas.join(", "):""}`;
+    } else txt = "";
+    if(pend) txt += (txt?"\n":"") + `${pend} ainda em leitura: ${pend>1?"serão lidos":"será lido"} na próxima rodada.`;
+    if(falhas.length) txt += (txt?"\n":"") + "✗ " + falhas.join("\n✗ ");
+    dizer(txt, falhas.length && !oks.length ? "var(--crit)" : "var(--good)");
   }catch(err){
     if(err.cod==="sessao") return alertaSessao();
     if(err.cod==="info") return dizer(err.message, "var(--good)");
-    const k = Object.keys(ERROS_FAZ).find(k=>err.message.includes(k));
-    dizer(k ? ERROS_FAZ[k] : err.message, "var(--crit)");
+    dizer(msgErro(err), "var(--crit)");
   }
 }
 function atualizarListaSessao(){
