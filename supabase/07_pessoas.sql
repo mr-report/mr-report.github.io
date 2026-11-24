@@ -37,6 +37,27 @@ alter table public.pessoa_fazendas enable row level security;
 alter table public.config_hist enable row level security;
 revoke all on public.pessoas, public.pessoa_fazendas, public.config_hist from anon, authenticated;
 
+-- ---------- vindos do 06 (repetidos aqui para o 07 funcionar mesmo sem ele) ----------
+create table if not exists public.login_falhas (quando timestamptz not null default now(), ip text);
+create index if not exists login_falhas_quando on public.login_falhas(quando);
+alter table public.login_falhas enable row level security;
+revoke all on public.login_falhas from anon, authenticated;
+create or replace function public._ip()
+returns text language sql stable as $$
+  select coalesce(
+    nullif(current_setting('request.headers', true)::jsonb ->> 'cf-connecting-ip', ''),
+    nullif(trim(split_part(coalesce(current_setting('request.headers', true)::jsonb ->> 'x-forwarded-for', ''), ',', 1)), ''),
+    'desconhecido');
+$$;
+create or replace function public.definir_senha_adm(p_senha text)
+returns void language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if length(coalesce(p_senha, '')) < 8 then raise exception 'A senha do administrador precisa ter pelo menos 8 caracteres'; end if;
+  insert into public.administrador(id, senha_hash) values (1, crypt(p_senha, gen_salt('bf')))
+  on conflict (id) do update set senha_hash = excluded.senha_hash;
+  delete from public.sessoes where fazenda_id is null and pessoa_id is null;
+end $$;
+
 -- ---------- quem é a sessão ----------
 -- papel: 'adm' | 'tecnico' | 'leitor' (senha da fazenda) | null (pessoa desativada)
 create or replace function public._papel(s public.sessoes)
@@ -361,18 +382,56 @@ begin
     'ultima_rodada', (select max(quando) from public.coleta_log where status = 'rodada'));
 end $$;
 
--- adm_salvar_fazenda: troca só a checagem de permissão (o resto continua igual ao 06)
-do $$
-declare def text;
+-- cadastro de fazenda (só administrador; senha da equipe com 6+ caracteres)
+create or replace function public.adm_salvar_fazenda(p_token text, p_id text, p_nome text, p_senha_equipe text, p_email text, p_senha_app text, p_remetente text DEFAULT NULL::text, p_ativa boolean DEFAULT true, p_sistema text DEFAULT 'tgc'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+declare s public.sessoes; existe boolean; sec uuid; app text;
 begin
-  def := pg_get_functiondef('public.adm_salvar_fazenda(text,text,text,text,text,text,text,boolean,text)'::regprocedure);
-  def := replace(def, E'  s := public._sessao(p_token);\n  if s.token is null then raise exception ''sessao_expirada'' using errcode = ''28000''; end if;\n  if s.fazenda_id is not null then raise exception ''sem_permissao'' using errcode = ''42501''; end if;',
-                      E'  s := public._exige(p_token, array[''adm'']);');
-  if position('_exige' in def) = 0 and position('_sessao(p_token)' in def) > 0 then
-    raise exception 'não consegui atualizar adm_salvar_fazenda: rode antes o 06_seguranca.sql';
+  s := public._exige(p_token, array['adm']);
+
+  p_id := lower(trim(p_id));
+  if p_id !~ '^[a-z0-9][a-z0-9-]{1,39}$' then raise exception 'codigo_invalido' using errcode = 'P0001'; end if;
+  if coalesce(trim(p_nome), '') = '' then raise exception 'nome_obrigatorio' using errcode = 'P0001'; end if;
+  if coalesce(p_sistema, 'tgc') not in ('tgc', 'feedmanager', 'farmtell') then raise exception 'sistema_invalido' using errcode = 'P0001'; end if;
+  if coalesce(trim(p_email), '') <> '' and trim(p_email) !~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
+    raise exception 'email_invalido' using errcode = 'P0001'; end if;
+  app := lower(regexp_replace(coalesce(p_senha_app, ''), '\s', '', 'g'));
+  if app <> '' and app !~ '^[a-z]{16}$' then raise exception 'senha_app_invalida' using errcode = 'P0001'; end if;
+
+  if coalesce(p_senha_equipe, '') <> '' and length(p_senha_equipe) < 6 then raise exception 'senha_curta' using errcode = 'P0001'; end if;
+  select true into existe from public.fazendas where id = p_id;
+  if existe is null then
+    if coalesce(p_senha_equipe, '') = '' then raise exception 'senha_equipe_obrigatoria' using errcode = 'P0001'; end if;
+    if exists (select 1 from public.fazendas f where f.senha_hash = crypt(p_senha_equipe, f.senha_hash))
+       or exists (select 1 from public.administrador a where a.senha_hash = crypt(p_senha_equipe, a.senha_hash)) then
+      raise exception 'senha_repetida' using errcode = 'P0001'; end if;
+    insert into public.fazendas(id, nome, senha_hash, email, remetente, ativa, sistema)
+    values (p_id, trim(p_nome), crypt(p_senha_equipe, gen_salt('bf')), nullif(trim(p_email), ''), nullif(trim(p_remetente), ''),
+            coalesce(p_ativa, true), coalesce(p_sistema, 'tgc'));
+  else
+    update public.fazendas set nome = trim(p_nome), email = nullif(trim(p_email), ''), remetente = nullif(trim(p_remetente), ''),
+      ativa = coalesce(p_ativa, true), sistema = coalesce(p_sistema, sistema) where id = p_id;
+    if coalesce(p_senha_equipe, '') <> '' then
+      if exists (select 1 from public.fazendas f where f.id <> p_id and f.senha_hash = crypt(p_senha_equipe, f.senha_hash))
+         or exists (select 1 from public.administrador a where a.senha_hash = crypt(p_senha_equipe, a.senha_hash)) then
+        raise exception 'senha_repetida' using errcode = 'P0001'; end if;
+      update public.fazendas set senha_hash = crypt(p_senha_equipe, gen_salt('bf')) where id = p_id;
+      delete from public.sessoes where fazenda_id = p_id;
+    end if;
   end if;
-  execute def;
-end $$;
+
+  if app <> '' then
+    select id into sec from vault.secrets where name = 'imap:' || p_id;
+    if sec is null then perform vault.create_secret(app, 'imap:' || p_id, 'senha de app do Gmail – ' || p_id);
+    else perform vault.update_secret(sec, app); end if;
+  end if;
+  return jsonb_build_object('id', p_id, 'criada', existe is null);
+end $function$;
+
 
 -- ---------- primeiro administrador (rode no SQL Editor; usa a senha de administrador atual) ----------
 create or replace function public.definir_primeiro_adm(p_nome text, p_usuario text)
