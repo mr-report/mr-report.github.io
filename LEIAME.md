@@ -131,6 +131,14 @@ pedir ao GitHub que rode o robô.
 4. A equipe da fazenda continua entrando só com a senha da fazenda (Vistoria, Análise, Baias, Inserir PDF, Atualizar).
 5. Cadastros guarda quem salvou e quando; "Histórico de alterações" mostra o que mudou e o administrador pode restaurar uma versão.
 
+### 9. Aba Relatórios (PDFs originais)
+1. No Supabase (SQL Editor), rode `supabase/08_relatorios.sql` (depois do 07).
+2. Os PDFs dos últimos 30 dias ficam no banco e abrem na hora. Os mais antigos ficam no Gmail da fazenda:
+   "Buscar no e-mail" pede ao robô, que traz o PDF em 1 a 3 minutos (fica 1 dia no banco).
+3. Os PDFs enviados pelo app são gravados pelo robô no Gmail da fazenda, na pasta "Mr Report" (o robô ignora essas
+   cópias na leitura). Fazenda sem e-mail configurado: o PDF enviado pelo app fica só 30 dias.
+4. Todos com acesso à fazenda veem a aba.
+
 ## Manutenção
 - **Nova fazenda**: no app, aba **Fazendas (ADM) → + Nova fazenda**. Preencha nome, senha da equipe, e-mail e senha de app.
   Não precisa mexer no Supabase nem no GitHub.

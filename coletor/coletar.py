@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import email
+import email.message
 import email.policy
 import email.utils
 import imaplib
@@ -130,6 +131,170 @@ def fazendas_cadastradas(conn) -> dict:
         return dict(cur.fetchall())
 
 
+# ---------------------------------------------------------------- PDFs originais (aba "Relatórios" – 08_relatorios.sql)
+DIAS_NO_BANCO = 30        # depois disso o PDF fica só no Gmail da fazenda
+
+
+def registrar_arquivo(conn, fid, meta, nome, origem, chave, conteudo, email_id=None, no_email=False, enviado_por=None):
+    """Guarda o PDF original (os últimos 30 dias ficam no banco). Sem o 08 instalado, não faz nada."""
+    try:
+        dref = date.fromisoformat(meta["data_ref"])
+        guardar = max(datetime.combine(dref + timedelta(days=DIAS_NO_BANCO), datetime.min.time()),
+                      datetime.now() + timedelta(days=1)) if origem == "app" else \
+            datetime.combine(dref + timedelta(days=DIAS_NO_BANCO), datetime.min.time())
+        manter = conteudo if (origem == "app" or guardar > datetime.now()) else None
+        with conn.cursor() as cur:
+            cur.execute("""insert into public.arquivos(fazenda_id, data_ref, nome, origem, enviado_por, sistema, tamanho, chave,
+                                                       email_id, no_email, conteudo, guardar_ate)
+                           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                           on conflict (fazenda_id, chave) do nothing""",
+                        (fid, meta["data_ref"], nome[:200], origem, enviado_por, meta.get("sistema"), len(conteudo), chave,
+                         email_id, no_email, manter, guardar if manter is not None else None))
+        conn.commit()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+        conn.rollback()
+
+
+def _imap(f):
+    imap = imaplib.IMAP4_SSL(f.get("servidor", "imap.gmail.com"), 993)
+    imap.login(f["email"], f["senha_app"].replace(" ", ""))
+    return imap
+
+
+def arquivar_no_email(conn, fazendas: list[dict]) -> None:
+    """Grava no Gmail da fazenda (pasta "Mr Report") os PDFs que chegaram pelo app, para o arquivo ficar completo."""
+    creds = {f["id"]: f for f in fazendas if f.get("email") and f.get("senha_app")}
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""select id, fazenda_id, nome, conteudo, data_ref, enviado_por, sistema from public.arquivos
+                           where origem='app' and not no_email and conteudo is not null order by id limit 100""")
+            pend = cur.fetchall()
+        conn.commit()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+        conn.rollback()
+        return
+    por_faz = {}
+    for row in pend:
+        if row[1] in creds:
+            por_faz.setdefault(row[1], []).append(row)
+    for fid, linhas in por_faz.items():
+        f = creds[fid]
+        try:
+            imap = _imap(f)
+        except Exception as e:
+            log(conn, fid, "erro", f"não consegui entrar no e-mail para guardar os PDFs enviados pelo app: {e}")
+            continue
+        try:
+            imap.create('"Mr Report"')            # já existe: o Gmail responde NO e seguimos
+            for aid, _, nome, conteudo, dref, quem, sistema in linhas:
+                msg = email.message.EmailMessage()
+                mid = email.utils.make_msgid(domain="mr-report.app")
+                msg["Message-ID"] = mid
+                msg["From"] = f["email"]
+                msg["To"] = f["email"]
+                msg["Date"] = email.utils.formatdate(localtime=True)
+                msg["Subject"] = (f"[Mr Report] Relatório {NOMES.get(sistema, sistema or '')} de {dref.strftime('%d/%m/%Y') if dref else ''}"
+                                  f" – enviado pelo app{(' por ' + quem) if quem else ''}")
+                msg.set_content("PDF original enviado pelo app Mr. Report (botão Inserir PDF). Guardado aqui como arquivo.")
+                msg.add_attachment(bytes(conteudo), maintype="application", subtype="pdf", filename=nome)
+                typ, _ = imap.append('"Mr Report"', "(\\Seen)", imaplib.Time2Internaldate(datetime.now().timestamp()), msg.as_bytes())
+                if typ == "OK":
+                    with conn.cursor() as cur:
+                        cur.execute("update public.arquivos set no_email=true, email_id=%s where id=%s", (mid, aid))
+                    conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log(conn, fid, "erro", f"não consegui guardar no e-mail os PDFs enviados pelo app: {type(e).__name__}: {e}")
+        finally:
+            try:
+                imap.logout()
+            except Exception:
+                pass
+
+
+def buscar_pedidos(conn, fazendas: list[dict]) -> None:
+    """Atende o botão "Buscar no e-mail": traz o PDF antigo do Gmail e deixa no banco por 1 dia."""
+    creds = {f["id"]: f for f in fazendas if f.get("email") and f.get("senha_app")}
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""update public.arquivos set pedido_status='erro', pedido_detalhe='o robô não conseguiu buscar a tempo; tente de novo'
+                           where pedido_status='pendente' and pedido_em < now() - interval '2 hours'""")
+            cur.execute("""select id, fazenda_id, nome, email_id from public.arquivos
+                           where pedido_status='pendente' order by pedido_em limit 50""")
+            pend = cur.fetchall()
+        conn.commit()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+        conn.rollback()
+        return
+
+    def fim(aid, status, detalhe, conteudo=None):
+        with conn.cursor() as cur:
+            if conteudo is not None:
+                cur.execute("""update public.arquivos set pedido_status=%s, pedido_detalhe=%s, conteudo=%s,
+                                 guardar_ate=now() + interval '1 day' where id=%s""", (status, detalhe, conteudo, aid))
+            else:
+                cur.execute("update public.arquivos set pedido_status=%s, pedido_detalhe=%s where id=%s", (status, detalhe, aid))
+        conn.commit()
+
+    por_faz = {}
+    for row in pend:
+        por_faz.setdefault(row[1], []).append(row)
+    for fid, linhas in por_faz.items():
+        f = creds.get(fid)
+        if not f:
+            for aid, *_ in linhas:
+                fim(aid, "erro", "a fazenda está sem e-mail configurado no app")
+            continue
+        try:
+            imap = _imap(f)
+            imap.select(_pasta_todos(imap), readonly=True)
+        except Exception as e:
+            for aid, *_ in linhas:
+                fim(aid, "erro", f"não consegui entrar no e-mail da fazenda: {e}")
+            continue
+        try:
+            for aid, _, nome, mid in linhas:
+                achou = None
+                if mid and not mid.startswith("uid-"):
+                    typ, data = imap.uid("search", None, "HEADER", "Message-ID", '"' + mid.replace('"', "") + '"')
+                    uids = data[0].split() if data and data[0] else []
+                    for uid in uids[:3]:
+                        typ, msg_data = imap.uid("fetch", uid, "(RFC822)")
+                        if not msg_data or not isinstance(msg_data[0], tuple):
+                            continue
+                        msg = email.message_from_bytes(msg_data[0][1], policy=email.policy.default)
+                        pdfs = [(_texto(p.get_filename() or ""), p.get_payload(decode=True)) for p in msg.walk()
+                                if p.get_content_type() == "application/pdf" or (p.get_filename() or "").lower().endswith(".pdf")]
+                        pdfs = [x for x in pdfs if x[1]]
+                        achou = next((c for n, c in pdfs if n == nome), None) or (pdfs[0][1] if pdfs else None)
+                        if achou:
+                            break
+                if achou:
+                    fim(aid, "pronto", "trazido do e-mail", achou)
+                else:
+                    fim(aid, "erro", "não encontrei este e-mail no Gmail da fazenda (pode ter sido apagado)")
+        except Exception as e:
+            conn.rollback()
+            log(conn, fid, "erro", f"falha ao buscar PDF antigo no e-mail: {type(e).__name__}: {e}")
+        finally:
+            try:
+                imap.logout()
+            except Exception:
+                pass
+
+
+def limpar_arquivos(conn) -> None:
+    """Tira do banco os PDFs depois do prazo (continuam no Gmail da fazenda)."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""update public.arquivos set conteudo=null,
+                             pedido_status = case when pedido_status='pronto' then null else pedido_status end
+                           where conteudo is not null and guardar_ate < now()""")
+        conn.commit()
+    except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+        conn.rollback()
+
+
 # ---------------------------------------------------------------- e-mail
 def _texto(h):
     try:
@@ -170,6 +335,8 @@ def pdfs_do_email(f: dict, desde: date):
             if filtro and not (endereco == filtro or endereco.endswith("@" + filtro) or endereco.endswith("." + filtro)):
                 continue
             mid = (msg.get("Message-ID") or f"uid-{uid.decode()}").strip()
+            if mid.endswith("@mr-report.app>"):     # cópia que o próprio robô guardou (enviada pelo app): não é relatório novo
+                continue
             for parte in msg.walk():
                 nome = parte.get_filename() or ""
                 tipo = parte.get_content_type()
@@ -223,6 +390,7 @@ def coletar(conn, fazendas: list[dict], dias: int) -> int:
                     log(conn, fid, "erro", f"PDF '{nome}': não consegui gravar ({type(e).__name__}: {e})", ref=mid)
                     continue
                 n[r] += 1
+                registrar_arquivo(conn, fid, meta, nome, "email", mid, conteudo, email_id=mid.rsplit("#", 1)[0], no_email=True)
                 if r != "repetido":
                     log(conn, fid, "ok", f"relatório {NOMES[meta['sistema']]} de {meta['data_ref']} ({r}): {meta['n_baias']} baias, "
                                          f"{meta['n_cab']} cab – '{nome}'")
@@ -244,15 +412,22 @@ def processar_uploads(conn) -> int:
             cur.execute("""update public.uploads set status='erro', conteudo=null, processado_em=now(),
                              detalhe='a leitura deste arquivo não terminou (arquivo estranho ou grande demais)'
                            where status='lendo' and quando < now() - interval '30 minutes'""")
-            cur.execute("""select u.id, u.fazenda_id, u.nome, f.sistema
-                           from public.uploads u join public.fazendas f on f.id = u.fazenda_id
-                           where u.status = 'pendente' order by u.id limit 200""")
-            pendentes = cur.fetchall()
+            try:
+                cur.execute("""select u.id, u.fazenda_id, u.nome, f.sistema, u.enviado_por
+                               from public.uploads u join public.fazendas f on f.id = u.fazenda_id
+                               where u.status = 'pendente' order by u.id limit 200""")
+                pendentes = cur.fetchall()
+            except psycopg.errors.UndefinedColumn:     # 08 ainda não instalado
+                conn.rollback()
+                cur.execute("""select u.id, u.fazenda_id, u.nome, f.sistema, null
+                               from public.uploads u join public.fazendas f on f.id = u.fazenda_id
+                               where u.status = 'pendente' order by u.id limit 200""")
+                pendentes = cur.fetchall()
         conn.commit()
     except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
         conn.rollback()            # 05_varios_sistemas.sql ainda não instalado
         return 0
-    for uid, fid, nome, sistema in pendentes:
+    for uid, fid, nome, sistema, quem in pendentes:
         data_ref, status = None, "erro"
         with conn.cursor() as cur:           # marca antes de ler: se travar, não volta a ser lido
             cur.execute("update public.uploads set status='lendo' where id=%s returning conteudo", (uid,))
@@ -264,6 +439,7 @@ def processar_uploads(conn) -> int:
             meta, baias = ler(bytes(conteudo), sistema)
             r = gravar(conn, fid, meta, baias, nome, f"upload:{uid}")
             data_ref, status = meta["data_ref"], "ok"
+            registrar_arquivo(conn, fid, meta, nome, "app", f"upload:{uid}", bytes(conteudo), enviado_por=quem)
             dref = date.fromisoformat(data_ref).strftime("%d/%m/%Y")
             detalhe = (f"relatório {NOMES[meta['sistema']]} de {dref} gravado ({'novo' if r == 'novo' else 'substituiu o anterior do mesmo dia'}): "
                        f"{meta['n_baias']} baias, {meta['n_cab']} cab")
@@ -323,7 +499,11 @@ def main():
             log(conn, None, "erro", "nenhuma fazenda com e-mail configurado (cadastre na aba Fazendas do app)")
             log(conn, None, "rodada", "fim da rodada (sem fazendas)")
             sys.exit(1)
+        if fazendas:
+            arquivar_no_email(conn, fazendas)     # PDFs enviados pelo app vão para o Gmail da fazenda
+            buscar_pedidos(conn, fazendas)        # botão "Buscar no e-mail" da aba Relatórios
         erros = coletar(conn, fazendas, a.dias) if fazendas else 0
+        limpar_arquivos(conn)
         # marca o fim da rodada: o botão "Atualizar" do app espera por este registro
         log(conn, None, "rodada", f"fim da rodada ({erros} erro(s))")
         sys.exit(1 if erros else 0)

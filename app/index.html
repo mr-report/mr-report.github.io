@@ -98,6 +98,9 @@ h3 small{font-weight:400;color:var(--ink2);font-size:12px}
 .fz-item:first-child{border-top:0}.fz-item.off{opacity:.6}
 th.com-dica{cursor:help}.i-dica{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--line);color:var(--ink2);font-size:10px;font-weight:700;margin-left:2px;vertical-align:1px}
 .dica-lim{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0 0}
+.rel-it{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding:10px 0}
+.rel-it:first-child{border-top:0}.rel-txt{min-width:0}.rel-txt small{display:block;color:var(--ink2);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rel-acao{flex:none;text-align:right}.rel-acao .help{font-size:12px}
 details.curva{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;background:var(--card)}
 details.curva summary{cursor:pointer;font-size:14px;list-style:revert}
 details.curva[open] summary{margin-bottom:4px}
@@ -281,6 +284,7 @@ td.l,th.l{text-align:left}
       <button data-tab="vistoria">Vistoria</button>
       <button data-tab="analise">Análise</button>
       <button data-tab="baias">Baias</button>
+      <button data-tab="relatorios">Relatórios</button>
       <button data-tab="adm" class="editor-only hidden">Cadastros</button>
       <button data-tab="comparativo" class="editor-only hidden">Comparativo</button>
       <button data-tab="fazendas" class="adm-only hidden">Fazendas</button>
@@ -321,6 +325,7 @@ td.l,th.l{text-align:left}
         <div class="card"><h3>Resumo por dieta <small>médias ponderadas por cabeças</small></h3><div class="tablewrap"><table id="anDietas"></table></div></div>
       </div>
     </div>
+    <div id="tab-relatorios" class="hidden"></div>
     <div id="tab-baias" class="hidden tabc">
       <div class="an-filters">
         <select id="bSexo" aria-label="Sexo"><option value="">Todos os sexos</option><option>Macho</option><option>Fêmea</option></select>
@@ -809,8 +814,8 @@ function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["vistoria","analise","baias","adm","fazendas","comparativo","pessoas","robo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
-  $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
+  ["vistoria","analise","baias","relatorios","adm","fazendas","comparativo","pessoas","robo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && x!=="relatorios" && semDados)));
+  $("#vazio").classList.toggle("hidden", abaAdm(t) || t==="relatorios" || !semDados || !$("#vazio").textContent);
   if(!abaAdm(t)) LS.set("aba", t);
   document.body.classList.toggle("na-vistoria", t==="vistoria");
   if(t==="vistoria" && S.rows) renderVistoria();
@@ -821,8 +826,10 @@ function setTab(t){
   if(t==="comparativo") renderComparativo();
   if(t==="pessoas") renderPessoas();
   if(t==="robo") renderRobo();
+  if(t==="relatorios") renderRelatorios();
 }
 function refresh(){
+  if(S.tab==="relatorios" && REL.farm!==S.farm) renderRelatorios();
   if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
   S.rows = analisar(S.farm,S.data);
   $("#brandSub").textContent = S.user.admin ? "ADM" : S.user.papel==="tecnico" ? "Técnico" : "";
@@ -1960,6 +1967,94 @@ function diffConfig(a, b){
   Object.keys(la).filter(d=>!(d in lb)).forEach(d=>out.push(`limites: dieta ${d} removida`));
   if((a.catInfoTitulo||"")!==(b.catInfoTitulo||"") || JSON.stringify(a.catInfo||{})!==JSON.stringify(b.catInfo||{})) out.push("informações das categorias alteradas");
   return out.length>8 ? out.slice(0,8).concat([`e mais ${out.length-8} mudanças`]) : out;
+}
+
+/* ---------- Relatórios: PDFs originais (30 dias no banco; o resto é buscado no Gmail da fazenda) ---------- */
+const REL = {farm:null, lista:[], buscando:new Set()};
+const ERROS_ARQ = {
+  arquivo_fora_do_banco:"Este PDF não está mais no banco. Use Buscar no e-mail.",
+  arquivo_sem_email:"Este PDF não foi guardado no e-mail (a fazenda estava sem e-mail configurado) e já saiu do banco.",
+  limite_pedidos:"Muitos pedidos de busca ao mesmo tempo. Espere os atuais terminarem.",
+  arquivo_inexistente:"Arquivo não encontrado. Recarregue a lista."
+};
+const msgArq = err => { const k=Object.keys(ERROS_ARQ).find(k=>err.message.includes(k)); return k?ERROS_ARQ[k]:err.message; };
+async function renderRelatorios(){
+  const el=$("#tab-relatorios"); if(!el || !S.farm) return;
+  const fid=S.farm; REL.farm=fid;
+  el.innerHTML=`<div class="card"><div class="loading">Carregando relatórios…</div></div>`;
+  try{ REL.lista = await rpc("listar_arquivos",{p_token:S.sessao.token,p_fazenda:fid}); }
+  catch(err){ if(err.cod==="sessao") return alertaSessao();
+    el.innerHTML=`<div class="card empty">${err.cod==="offline"?"Sem internet: a lista de relatórios precisa de conexão.":
+      /listar_arquivos|PGRST202/.test(err.message)?"A aba Relatórios ainda não foi ativada no banco (arquivo 08_relatorios.sql).":esc(err.message)}</div>`; return; }
+  if(S.farm!==fid) return;
+  desenharRelatorios();
+  REL.lista.filter(a=>a.pedido_status==="pendente" && !REL.buscando.has(a.id)).forEach(a=>acompanharBusca(a.id, false));
+}
+function desenharRelatorios(){
+  const el=$("#tab-relatorios"), L=REL.lista;
+  const tam=b=>b==null?"":b>1048576?fmt(b/1048576,1)+" MB":Math.round(b/1024)+" KB";
+  const dt=s=>s?isoParaBR(s):"–";
+  const linha=a=>{
+    const busc = REL.buscando.has(a.id) || a.pedido_status==="pendente";
+    const acao = a.disponivel ? `<button class="btn small" data-abrir="${a.id}">Abrir PDF</button>`
+      : busc ? `<span class="help">Buscando no e-mail… (1 a 3 min)</span>`
+      : a.no_email ? `<button class="btn ghost small" data-buscar="${a.id}">Buscar no e-mail</button>`
+      : `<span class="help" title="Enviado antes desta versão ou sem e-mail configurado">original não guardado</span>`;
+    return `<div class="rel-it"><div class="rel-txt"><b>${dt(a.data_ref)}</b>${a.em_uso?' <span class="chip ok" title="É o PDF usado nas análises deste dia">em uso</span>':""}
+        <small>${esc(NOME_SIST[a.sistema]||a.sistema||"–")} · ${a.origem==="email"?"E-mail":"App"+(a.enviado_por?" ("+esc(a.enviado_por)+")":"")} · <span title="${esc(a.nome)}">${esc(a.nome)}</span>${a.tamanho?" · "+tam(a.tamanho):""}</small>
+        ${a.pedido_status==="erro"&&!busc&&!a.disponivel?`<small style="color:var(--crit)">${esc(a.pedido_detalhe||"")}</small>`:""}</div>
+      <div class="rel-acao">${acao}</div></div>`; };
+  el.innerHTML=`<div class="card">
+    <h3 style="margin-top:0">Relatórios originais <small>${esc((DATA[S.farm]||{}).nome||"")}</small></h3>
+    <p class="help">Os PDFs dos últimos 30 dias abrem na hora. Os mais antigos ficam guardados no e-mail da fazenda: toque em <b>Buscar no e-mail</b> e o robô traz o arquivo em 1 a 3 minutos.
+      Quando um dia tem mais de um PDF, o marcado <span class="chip ok">em uso</span> é o que vale nas análises.</p>
+    <div id="relTab" class="rel-lista">${L.length?L.map(linha).join(""):`<p class="help">Nenhum relatório guardado ainda.</p>`}</div>
+    <div class="err" id="relMsg"></div></div>`;
+  el.querySelectorAll("[data-abrir]").forEach(b=>b.onclick=()=>abrirArquivo(+b.dataset.abrir, b));
+  el.querySelectorAll("[data-buscar]").forEach(b=>b.onclick=()=>buscarArquivo(+b.dataset.buscar));
+}
+async function abrirArquivo(id, btn){
+  if(btn){ btn.disabled=true; btn.textContent="Baixando…"; }
+  try{
+    const r=await rpc("baixar_arquivo",{p_token:S.sessao.token,p_id:id});
+    const bin=atob(r.base64), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([arr],{type:"application/pdf"}));
+    const a=document.createElement("a"); a.href=url; a.download=r.nome||"relatorio.pdf"; a.target="_blank"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(err){ if(err.cod==="sessao") return alertaSessao(); const m=$("#relMsg"); if(m) m.textContent=msgArq(err);
+    if(err.message.includes("arquivo_fora_do_banco")) renderRelatorios(); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent="Abrir PDF"; } }
+}
+async function buscarArquivo(id){
+  try{ await rpc("pedir_arquivo",{p_token:S.sessao.token,p_id:id}); }
+  catch(err){ if(err.cod==="sessao") return alertaSessao(); $("#relMsg").textContent=msgArq(err); return; }
+  acompanharBusca(id, true);
+}
+/* pede uma rodada ao robô e acompanha até o PDF chegar (abre sozinho quando pedido agora) */
+async function acompanharBusca(id, abrir){
+  if(REL.buscando.has(id)) return; REL.buscando.add(id);
+  const a=REL.lista.find(x=>x.id===id); if(a) a.pedido_status="pendente";
+  if(S.tab==="relatorios") desenharRelatorios();
+  let ped=null;
+  const pedir=async()=>{ try{ ped=await rpc("pedir_coleta",{p_token:S.sessao.token}); ped.t=Date.now(); }catch(e){ ped={t:Date.now(),falhou:true}; } };
+  try{
+    await pedir();
+    const ini=Date.now();
+    while(Date.now()-ini < 9*60000){
+      await esperar(CFG.intervalo || 15000);
+      const st=await rpc("situacao_arquivo",{p_token:S.sessao.token,p_id:id});
+      if(st && st.status && st.status!=="pendente"){
+        REL.buscando.delete(id);
+        if(a){ a.pedido_status=st.status; a.pedido_detalhe=st.detalhe; a.disponivel=st.disponivel; }
+        if(S.tab==="relatorios" && REL.farm===S.farm) desenharRelatorios();
+        if(st.disponivel && abrir) abrirArquivo(id);
+        return;
+      }
+      if(ped && Date.now()-ped.t > (ped.repetido?190000:200000)) await pedir();
+    }
+  }catch(err){ if(err.cod==="sessao") return alertaSessao(); }
+  REL.buscando.delete(id);
+  if(S.tab==="relatorios" && REL.farm===S.farm) renderRelatorios();
 }
 
 /* ---------- robô (ADM): situação da coleta e últimos eventos ---------- */
