@@ -90,6 +90,12 @@ h3 small{font-weight:400;color:var(--ink2);font-size:12px}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap;font-weight:600}
 .chip.ok{background:var(--good-bg);color:var(--good)}
 .chip.sist{background:#e6ecf5;color:var(--primary)}
+details.curva{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;background:var(--card)}
+details.curva summary{cursor:pointer;font-size:14px;list-style:revert}
+details.curva[open] summary{margin-bottom:4px}
+table.edit[data-pts]{width:auto;min-width:300px}
+table.edit[data-pts] td,table.edit[data-pts] th{padding-right:10px}
+table.edit[data-pts] input{width:68px!important;min-width:0}
 @media (prefers-color-scheme:dark){.chip.sist{background:#1b2a44;color:#b9c8e6}}
 .up-msg{font-size:13px;margin:-4px 2px 10px}.up-msg:empty{display:none}
 .chip.medio{background:var(--warn-bg);color:#8a6200}
@@ -426,18 +432,13 @@ function defaultConfig(farmId){
   Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>cts.add(String(r.ct))));
   const femea = ["NE","NX","VS","NO","VA","FE"];
   const categorias = {}; [...cts].sort().forEach(c=>categorias[c] = (femea.includes(c) || /novilh|vaca|f[êe]mea|bezerra|matriz/i.test(c))?"Fêmea":"Macho");
-  const faixas = [[1,20,2.00],[21,40,2.30],[41,65,2.45],[66,90,2.35],[91,110,2.25],[111,250,2.15]];
-  const curva = [];
-  faixas.forEach(([a,b,v])=>{
-    curva.push({sexo:"Macho",pesoMin:0,pesoMax:9999,diaIni:a,diaFim:b,pv:v});
-    curva.push({sexo:"Fêmea",pesoMin:0,pesoMax:9999,diaIni:a,diaFim:b,pv:+(v-0.10).toFixed(2)});
-  });
   const dietas = new Set();
   Object.values((DATA[farmId]||{relatorios:{}}).relatorios).forEach(rs=>rs.forEach(r=>{ if(r.racao) dietas.add(r.racao); }));
   const limites = {"Padrão":{ontem:5,cinco:8,curva:0.20,escore:3}};
   [...dietas].sort().forEach(d=>limites[d]={...limites["Padrão"]});
   return {
-    categorias, curva, catInfoTitulo:"Informações adicionais", catInfo:{},
+    // curvas esperadas: uma por categoria × faixa de peso de entrada, com intervalos de dias livres
+    categorias, curvas:[], catInfoTitulo:"Informações adicionais", catInfo:{}, escoreUnid:"%",
     // FarmTell usa notas de -2 a 2 (negativa = cocho limpo, pede aumento); TGC, de 0 a 3
     escore: ((SRV[farmId]&&SRV[farmId].sistema)==="farmtell")
       ? [{nota:-2,ajuste:4},{nota:-1,ajuste:2},{nota:0,ajuste:0},{nota:1,ajuste:-2},{nota:2,ajuste:-4}]
@@ -454,7 +455,8 @@ function getConfig(farmId){
     const d = defaultConfig(farmId);
     c.categorias = c.categorias || {}; Object.keys(d.categorias).forEach(k=>{ if(!(k in c.categorias)) c.categorias[k]=d.categorias[k]; });
     c.limites = c.limites || {"Padrão":d.limites["Padrão"]}; Object.keys(d.limites).forEach(k=>{ if(!(k in c.limites)) c.limites[k]={...(c.limites["Padrão"]||d.limites["Padrão"])}; });
-    c.curva = c.curva || d.curva; c.escore = c.escore || d.escore;
+    c.curvas = Array.isArray(c.curvas) ? c.curvas : []; delete c.curva;   // o modelo antigo (linhas por sexo) foi retirado
+    c.escore = c.escore || d.escore; if(!["%","kgMN","kgMS"].includes(c.escoreUnid)) c.escoreUnid = "%";
     if(c.catInfoTitulo==null) c.catInfoTitulo="Informações adicionais";
     if(!c.catInfo) c.catInfo={};
     cfgCache[farmId]=c;
@@ -467,15 +469,32 @@ const fmt = (v,d=2)=> v==null||isNaN(v) ? "–" : v.toLocaleString("pt-BR",{mini
 const pct = (v,d=1)=> v==null||isNaN(v) ? "–" : (v>0?"+":"")+fmt(v,d)+"%";
 const pp  = (v)=> v==null||isNaN(v) ? "–" : (v>0?"+":"")+fmt(v,2)+" p.p.";
 
+/* curva da baia: a da categoria (CT) cuja faixa de peso de entrada contém o peso da baia */
+function curvaDa(cfg, r){
+  if(r.peso_entrada==null) return null;
+  return cfg.curvas.find(c=>c.categoria===String(r.ct) && r.peso_entrada>=c.pesoMin && r.peso_entrada<=c.pesoMax) || null;
+}
 function esperado(cfg, r){
-  const sexo = cfg.categorias[String(r.ct)];
-  if(!sexo) return {pv:null, sexo:null};
-  const f = cfg.curva.find(c=>c.sexo===sexo && r.peso_entrada>=c.pesoMin && r.peso_entrada<=c.pesoMax && r.dias_conf>=c.diaIni && r.dias_conf<=c.diaFim);
-  return {pv: f?f.pv:null, sexo};
+  const sexo = cfg.categorias[String(r.ct)] || null, cv = curvaDa(cfg, r);
+  const f = cv && r.dias_conf!=null ? cv.pontos.find(p=>r.dias_conf>=p.diaIni && r.dias_conf<=p.diaFim) : null;
+  return {pv: f?f.pv:null, sexo, curva:cv};
 }
 function ajusteNota(cfg, nota){
   const e = cfg.escore.find(x=>Math.abs(x.nota-nota)<1e-9);
   return e ? e.ajuste : null;
+}
+/* ajuste do escore em % do trato anterior, mesmo quando a tabela está em kg por cabeça */
+const UNID_ESC = {"%":"%", kgMN:"kg MN/cab", kgMS:"kg MS/cab"};
+function ajusteEmPct(cfg, r, aj){
+  if(aj==null) return null;
+  if(cfg.escoreUnid==="kgMN"){ const b = r.mn_1d || r.cons_dia_mn; return b ? aj/b*100 : null; }
+  if(cfg.escoreUnid==="kgMS"){ const b = r.ms_1d || r.cons_dia_ms; return b ? aj/b*100 : null; }
+  return aj;
+}
+function txtAjuste(cfg, aj, ajPct){
+  if(aj==null) return "–";
+  if(cfg.escoreUnid==="%") return pct(aj,0);
+  return (aj>0?"+":"")+fmt(aj,2)+" kg "+(cfg.escoreUnid==="kgMN"?"MN":"MS")+(ajPct!=null?` (${pct(ajPct,1)})`:"");
 }
 function limitesDe(cfg, dieta){ return cfg.limites[dieta] || cfg.limites["Padrão"]; }
 const SEV = {ok:0, medio:1, alto:2};
@@ -499,9 +518,11 @@ function analisar(farmId, data){
     r.dOntemKg = r.dOntem!=null ? r.cons_dia_ms - r.ms_1d : null;
     r.d5Kg = r.d5!=null ? r.cons_dia_ms - r.ms_5d : null;
     r.temCocho = r.cocho_d1!=null;
-    const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv;
+    const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv; r.curva = e.curva;
     r.dCurva = e.pv==null || r.cons_dia_pv==null ? null : r.cons_dia_pv - e.pv;
-    r.ajuste = r.temCocho ? ajusteNota(cfg, r.cocho_d1) : null;
+    r.ajusteBruto = r.temCocho ? ajusteNota(cfg, r.cocho_d1) : null;
+    r.ajuste = ajusteEmPct(cfg, r, r.ajusteBruto);
+    r.ajusteTxt = txtAjuste(cfg, r.ajusteBruto, r.ajuste);
     r.checks = [];
     const add=(sev,titulo,texto,curto)=>r.checks.push({sev,titulo,texto,curto});
 
@@ -525,11 +546,15 @@ function analisar(farmId, data){
 
     // 3. dentro do esperado (curva)
     if(!temHoje) {}
+    else if(r.pvEsp==null && !cfg.curvas.length)
+      add("ok","Nenhuma curva esperada cadastrada","Cadastre as curvas por categoria em Cadastros para comparar o consumo com o esperado.");
     else if(r.pvEsp==null)
-      add("medio","Sem curva cadastrada para esta baia",`Categoria "${r.ct}"${r.sexo?" ("+r.sexo+")":" sem sexo cadastrado"}, ${r.dias_conf??"–"} dias, entrada ${fmt(r.peso_entrada,0)} kg. Cadastre em Cadastros.`, "sem curva");
+      add("medio", r.curva ? "Curva sem valor para estes dias" : "Sem curva cadastrada para esta baia",
+        r.curva ? `A curva da categoria "${r.ct}" (${fmt(r.curva.pesoMin,0)}–${fmt(r.curva.pesoMax,0)} kg) não tem intervalo que inclua ${r.dias_conf??"–"} dias. Complete em Cadastros.`
+                : `Categoria "${r.ct}", entrada com ${fmt(r.peso_entrada,0)} kg: não há curva para essa categoria e peso. Cadastre em Cadastros.`, "sem curva");
     else if(Math.abs(r.dCurva) > L.curva)
       add(r.dCurva < -L.curva*2?"alto":"medio","Consumo "+(r.dCurva<0?"abaixo":"acima")+" da curva esperada",
-        `${fmt(r.cons_dia_pv)}% PV hoje × ${fmt(r.pvEsp)}% esperado para ${r.sexo.toLowerCase()} com ${r.dias_conf??"–"} dias (${pp(r.dCurva)}). Tolerância: ±${fmt(L.curva)} p.p.`, `${pp(r.dCurva)} × curva`);
+        `${fmt(r.cons_dia_pv)}% PV hoje × ${fmt(r.pvEsp)}% esperado para a categoria ${r.ct} com ${r.dias_conf??"–"} dias (${pp(r.dCurva)}). Tolerância: ±${fmt(L.curva)} p.p.`, `${pp(r.dCurva)} × curva`);
     else add("ok","Consumo dentro da curva esperada",`${fmt(r.cons_dia_pv)}% PV × ${fmt(r.pvEsp)}% esperado (${pp(r.dCurva)}).`);
   });
 
@@ -543,12 +568,12 @@ function analisar(farmId, data){
     if(r.dOntem!=null && Math.abs(dif) > L.escore)
       probs.push({sev: Math.sign(r.dOntem)!==Math.sign(r.ajuste) && r.ajuste!==0 ? "alto":"medio",
         titulo:"Escore × consumo: variação diferente da que a nota pedia",
-        texto:`Nota ${r.sistema==="farmtell"?"do dia":"de ontem"} ${fmt(r.cocho_d1,1)} pedia ajuste de ${pct(r.ajuste,0)}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
+        texto:`Nota ${r.sistema==="farmtell"?"do dia":"de ontem"} ${fmt(r.cocho_d1,1)} pedia ajuste de ${r.ajusteTxt}; o consumo variou ${pct(r.dOntem)} (diferença ${pp(dif).replace(" p.p.","")} p.p., tolerância ±${L.escore}).`, curto:"escore × consumo"});
     if(r.dCurva!=null){
       if(r.ajuste>0 && r.dCurva > L.curva)
-        probs.push({sev:"medio",titulo:"Escore × curva: nota pede aumento, mas a baia já está acima da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} acima do esperado. Conferir a leitura do cocho.`,curto:"escore × curva"});
+        probs.push({sev:"medio",titulo:"Escore × curva: nota pede aumento, mas a baia já está acima da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${r.ajusteTxt}) com consumo ${pp(r.dCurva)} acima do esperado. Conferir a leitura do cocho.`,curto:"escore × curva"});
       if(r.ajuste<0 && r.dCurva < -L.curva)
-        probs.push({sev:"alto",titulo:"Escore × curva: nota pede redução, mas a baia já está abaixo da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) com consumo ${pp(r.dCurva)} abaixo do esperado. Verificar sanidade, água e dieta.`,curto:"escore × curva"});
+        probs.push({sev:"alto",titulo:"Escore × curva: nota pede redução, mas a baia já está abaixo da curva",texto:`Nota ${fmt(r.cocho_d1,1)} (${r.ajusteTxt}) com consumo ${pp(r.dCurva)} abaixo do esperado. Verificar sanidade, água e dieta.`,curto:"escore × curva"});
     }
     // comparação com as baias da mesma dieta
     const pares = rows.filter(o=>o!==r && o.racao===r.racao && o.temCocho && o.d5!=null);
@@ -565,7 +590,7 @@ function analisar(farmId, data){
     if(r.ajuste && a2 && a3 && Math.sign(r.ajuste)===Math.sign(a2) && Math.sign(a2)===Math.sign(a3))
       probs.push({sev:"medio",titulo:"Três leituras seguidas pedindo "+(r.ajuste>0?"aumento":"redução"),texto:`Notas ${fmt(r.cocho_d3,1)} → ${fmt(r.cocho_d2,1)} → ${fmt(r.cocho_d1,1)}. O trato pode não estar acompanhando a demanda.`,curto:"ajuste persistente"});
     if(probs.length) r.checks.push(...probs);
-    else r.checks.push({sev:"ok",titulo:"Escore de cocho coerente",texto:`Nota ${fmt(r.cocho_d1,1)} (${pct(r.ajuste,0)}) compatível com a variação do consumo (${pct(r.dOntem)}), com a curva e com as demais baias.`});
+    else r.checks.push({sev:"ok",titulo:"Escore de cocho coerente",texto:`Nota ${fmt(r.cocho_d1,1)} (${r.ajusteTxt}) compatível com a variação do consumo (${pct(r.dOntem)}), com a curva e com as demais baias.`});
   });
 
   rows.forEach(r=>{
@@ -927,7 +952,7 @@ function renderVistoria(){
       </section>
 ${r.temCocho?`      <section class="vt-sec">
         <h3>Leitura de cocho</h3>
-        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>
+        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajusteBruto==null?"–":(getConfig(S.farm).escoreUnid==="%"?pct(r.ajusteBruto,0):(r.ajusteBruto>0?"+":"")+fmt(r.ajusteBruto,2))}<small>ajuste pedido${getConfig(S.farm).escoreUnid==="%"?"":" ("+UNID_ESC[getConfig(S.farm).escoreUnid]+")"}</small></span></div>
       </section>`:""}
       <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
         <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
@@ -1073,11 +1098,12 @@ function renderScatter(R){
   const step=(maxD>150?30:maxD>60?15:10)*(W<560?2:1);
   for(let d=0; d<=maxD; d+=step) g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
   g+=`<text x="${W-m.r}" y="${H-3}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
-  const sexos=emPV ? [...new Set(R.map(r=>r.sexo).filter(Boolean))] : [];
-  sexos.forEach((sx,i)=>{
-    const fx=cfg.curva.filter(c=>c.sexo===sx).sort((a,b)=>a.diaIni-b.diaIni);
-    let p=""; fx.forEach(c=>{ const a=Math.max(c.diaIni,minD), b=Math.min(c.diaFim,maxD); if(a>maxD) return; p+=`M${x(a)},${y(c.pv)}H${x(b)}`; });
-    g+=`<path d="${p}" fill="none" stroke="${i?"var(--muted)":"var(--ink2)"}" stroke-width="2" stroke-dasharray="${i?"2 4":"6 4"}"/>`;
+  // curvas usadas pelas baias visíveis (as 4 com mais baias), cada uma com uma cor da paleta de séries
+  const usoCv=new Map(); if(emPV) R.forEach(r=>{ if(r.curva) usoCv.set(r.curva,(usoCv.get(r.curva)||0)+1); });
+  const curvasG=[...usoCv.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4).map(e=>e[0]);
+  curvasG.forEach((cv,i)=>{
+    let p=""; [...cv.pontos].sort((a,b)=>a.diaIni-b.diaIni).forEach(c=>{ const a=Math.max(c.diaIni,minD), b=Math.min(c.diaFim,maxD); if(a>maxD||b<minD) return; p+=`M${x(a)},${y(c.pv)}H${x(b)}`; });
+    g+=`<path d="${p}" fill="none" stroke="var(--s${i+1})" stroke-width="2" stroke-dasharray="6 4"/>`;
   });
   R.forEach(r=>{
     const col = r.sev==="alto"?"var(--crit)":r.sev==="medio"?"var(--warn)":"var(--accent)";
@@ -1085,7 +1111,8 @@ function renderScatter(R){
   });
   box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="IMS %PV de cada baia por dias de cocho">${g}</svg><div class="tip"></div>`;
   $("#anScatterLeg").innerHTML=`<span><i style="background:var(--accent)"></i>sem alerta</span><span><i style="background:var(--warn)"></i>atenção</span><span><i style="background:var(--crit)"></i>alerta alto</span>`+
-    sexos.map((s,i)=>`<span><i class="dash" style="${i?"border-top-style:dotted;border-color:var(--muted)":""}"></i>curva – ${s.toLowerCase()}</span>`).join("");
+    curvasG.map((cv,i)=>`<span><i class="dash" style="border-color:var(--s${i+1})"></i>curva ${esc(cv.categoria)} · ${fmt(cv.pesoMin,0)}–${fmt(cv.pesoMax,0)} kg</span>`).join("")+
+    (usoCv.size>4?`<span style="color:var(--muted)">+${usoCv.size-4} curvas (filtre por categoria para ver)</span>`:"");
   const tip=box.querySelector(".tip");
   box.querySelectorAll("circle").forEach(c=>{
     const r=R.find(o=>o.curral===c.dataset.cur);
@@ -1242,7 +1269,7 @@ function openBaia(cur){
     <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><h3 style="margin:0">Curva de consumo</h3><div class="seg" id="segM"><button data-m="ms" class="on">kg MS</button><button data-m="pv">%PV</button></div></div>
     <div class="chart" id="bChart"></div><div class="legend" id="bLegend"></div><div class="note" id="bNote"></div>
 ${r.temCocho?`    <h3 style="margin-top:14px">Leitura de cocho</h3>
-    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajuste==null?"–":pct(r.ajuste,0)}<small>ajuste pedido</small></span></div>`:""}
+    <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajusteBruto==null?"–":(getConfig(S.farm).escoreUnid==="%"?pct(r.ajusteBruto,0):(r.ajusteBruto>0?"+":"")+fmt(r.ajusteBruto,2))}<small>ajuste pedido${getConfig(S.farm).escoreUnid==="%"?"":" ("+UNID_ESC[getConfig(S.farm).escoreUnid]+")"}</small></span></div>`:""}
     <h3 style="margin-top:14px">Verificações</h3>
     <div>${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div>`;
   $("#modal").classList.remove("hidden");
@@ -1571,16 +1598,17 @@ function renderAdm(){
   </div>
   <div class="adm-section card">
     <h3 style="margin-top:0">Curva esperada (%PV)</h3>
-    <p class="help">Uma linha por sexo × faixa de peso de entrada × faixa de dias de confinamento.</p>
-    <div class="tablewrap"><table class="edit" id="tCurva"><thead><tr><th class="l">Sexo</th><th>Peso entr. de</th><th>até</th><th>Dia de</th><th>até</th><th>%PV</th><th></th></tr></thead><tbody>
-    ${cfg.curva.map(c=>curvaRow(c)).join("")}
-    </tbody></table></div>
-    <div class="row-actions"><button class="btn ghost small" id="addCurva">+ Linha</button></div>
+    <p class="help">Uma curva por categoria e faixa de peso de entrada, com quantos intervalos de dias de confinamento você quiser. Toque numa curva para ver ou editar.</p>
+    <div id="curvasLista"></div>
+    <div id="curvaNova"></div>
+    <div class="row-actions"><button class="btn ghost small" id="addCurva">+ Adicionar curva</button></div>
   </div>
   <div class="adm-section card">
     <h3 style="margin-top:0">Escore de cocho</h3>
-    <p class="help">Ajuste no trato (em % sobre o ofertado no dia anterior) que cada nota pede.</p>
-    <div class="tablewrap"><table class="edit" id="tEsc"><thead><tr><th class="l">Nota</th><th>Ajuste (%)</th><th></th></tr></thead><tbody>
+    <p class="help">Ajuste no trato que cada nota pede, sobre o ofertado no dia anterior. Em kg, o app converte para % usando o consumo de ontem da baia.</p>
+    <label class="field" style="max-width:300px"><span>Ajuste em</span><select id="escUnid">
+      ${Object.entries(UNID_ESC).map(([k,v])=>`<option value="${k}" ${cfg.escoreUnid===k?"selected":""}>${k==="%"?"% do trato":v}</option>`).join("")}</select></label>
+    <div class="tablewrap"><table class="edit" id="tEsc"><thead><tr><th class="l">Nota</th><th id="escTit">Ajuste (${UNID_ESC[cfg.escoreUnid]})</th><th></th></tr></thead><tbody>
     ${cfg.escore.map(e=>escRow(e)).join("")}
     </tbody></table></div>
     <div class="row-actions"><button class="btn ghost small" id="addEsc">+ Nota</button></div>
@@ -1600,19 +1628,106 @@ function renderAdm(){
   </div>`;
   const bindDel=()=>el.querySelectorAll(".del").forEach(b=>b.onclick=()=>b.closest("tr").remove());
   bindDel();
-  $("#addCurva").onclick=()=>{ $("#tCurva tbody").insertAdjacentHTML("beforeend",curvaRow({sexo:"Macho",pesoMin:0,pesoMax:9999,diaIni:1,diaFim:20,pv:2})); bindDel(); };
+  /* ----- curvas: lista recolhida + assistente "Adicionar curva" (categoria → faixa de peso → intervalos de dias) ----- */
+  const curvas = cfg.curvas.map(c=>({...c, pontos:c.pontos.map(p=>({...p}))}));
+  const catsCad = ()=>[...el.querySelectorAll("#tCat tbody tr")].map(tr=>tr.querySelector("[data-sigla]").value.trim().toUpperCase()).filter(Boolean);
+  const sexoDe = c=>{ const tr=[...el.querySelectorAll("#tCat tbody tr")].find(tr=>tr.querySelector("[data-sigla]").value.trim().toUpperCase()===c); return tr?tr.querySelector("[data-sexo]").value:""; };
+  const resumoCurva = c=>{ const ps=[...c.pontos].sort((a,b)=>a.diaIni-b.diaIni);
+    return `<b>${esc(c.categoria)}</b>${sexoDe(c.categoria)?" · "+sexoDe(c.categoria):""} · entrada ${fmt(c.pesoMin,0)}–${fmt(c.pesoMax,0)} kg · ${ps.length} intervalo${ps.length===1?"":"s"}`+
+      (ps.length?` <span style="color:var(--ink2)">(${ps[0].diaIni}–${ps[ps.length-1].diaFim} dias · ${fmt(ps[0].pv)} → ${fmt(ps[ps.length-1].pv)} %PV)</span>`:""); };
+  const ptRow = p=>`<tr><td>${numIn(p.diaIni??"",1,70)}</td><td>${numIn(p.diaFim??"",1,70)}</td><td>${numIn(p.pv??"",0.01,80)}</td><td><button class="btn ghost small delpt" aria-label="Remover intervalo">✕</button></td></tr>`;
+  const editorPontos = (c, idx)=>`
+    <div class="grid2" style="grid-template-columns:repeat(2,minmax(0,150px));gap:10px;margin:8px 0">
+      <label class="field"><span>Peso de entrada de (kg)</span>${numIn(c.pesoMin??"",1,120).replace("<input",'<input data-pmin')}</label>
+      <label class="field"><span>até (kg)</span>${numIn(c.pesoMax??"",1,120).replace("<input",'<input data-pmax')}</label></div>
+    <div class="tablewrap"><table class="edit" data-pts="${idx}"><thead><tr><th>Dia de</th><th>até</th><th>%PV</th><th></th></tr></thead><tbody>
+      ${c.pontos.map(ptRow).join("")}</tbody></table></div>
+    <div class="row-actions"><button class="btn ghost small addpt">+ Intervalo de dias</button><button class="btn ghost small delcv" style="color:var(--crit)">Remover curva</button></div>`;
+  // lê da tela o que foi digitado em cada curva (antes de redesenhar ou salvar)
+  const lerCurvas = ()=>{ el.querySelectorAll("[data-cv]").forEach(box=>{ const c=curvas[+box.dataset.cv]; if(!c) return;
+      c.pesoMin = box.querySelector("[data-pmin]").value===""?null:+box.querySelector("[data-pmin]").value;
+      c.pesoMax = box.querySelector("[data-pmax]").value===""?null:+box.querySelector("[data-pmax]").value;
+      c.pontos = [...box.querySelectorAll("tbody tr")].map(tr=>{ const i=tr.querySelectorAll("input"); return {diaIni:i[0].value===""?null:+i[0].value, diaFim:i[1].value===""?null:+i[1].value, pv:i[2].value===""?null:+i[2].value}; }); }); };
+  const abertas = new Set();
+  const desenharCurvas = ()=>{
+    const ord = curvas.map((c,i)=>i).sort((a,b)=>curvas[a].categoria.localeCompare(curvas[b].categoria)||(curvas[a].pesoMin??0)-(curvas[b].pesoMin??0));
+    $("#curvasLista").innerHTML = ord.length ? ord.map(i=>`<details class="curva" data-cv="${i}" ${abertas.has(i)?"open":""}><summary>${resumoCurva(curvas[i])}</summary>${editorPontos(curvas[i], i)}</details>`).join("")
+      : `<p class="help" style="margin:0">Nenhuma curva cadastrada. As baias ficam sem comparação com o esperado até você cadastrar.</p>`;
+    $("#curvasLista").querySelectorAll("details").forEach(d=>{
+      const i=+d.dataset.cv;
+      d.ontoggle=()=>{ d.open?abertas.add(i):abertas.delete(i); };
+      d.querySelector(".addpt").onclick=()=>{ lerCurvas(); const ps=curvas[i].pontos, ult=ps[ps.length-1];
+        ps.push({diaIni: ult&&ult.diaFim!=null ? ult.diaFim+1 : 1, diaFim:null, pv: ult?ult.pv:null}); abertas.add(i); desenharCurvas(); };
+      d.querySelectorAll(".delpt").forEach((b,k)=>b.onclick=()=>{ lerCurvas(); curvas[i].pontos.splice(k,1); desenharCurvas(); });
+      d.querySelector(".delcv").onclick=()=>{ if(!confirm("Remover esta curva?")) return; lerCurvas(); curvas.splice(i,1); abertas.clear(); desenharCurvas(); };
+      d.querySelectorAll("input").forEach(inp=>inp.oninput=()=>{ lerCurvas(); d.querySelector("summary").innerHTML=resumoCurva(curvas[i]); });
+    });
+  };
+  desenharCurvas();
+  $("#addCurva").onclick=()=>{
+    lerCurvas();
+    const cats=catsCad(), box=$("#curvaNova");
+    if(!cats.length){ box.innerHTML=`<p class="help">Cadastre as categorias acima antes de criar uma curva.</p>`; return; }
+    // passo 1: escolher a categoria
+    box.innerHTML=`<div class="card" style="margin:10px 0;padding:12px"><b>Nova curva</b> · 1. escolha a categoria
+      <div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${cats.map(c=>`<button class="btn ghost small" data-cat="${esc(c)}">${esc(c)}${sexoDe(c)?" · "+sexoDe(c):""}</button>`).join("")}</div>
+      <div class="row-actions"><button class="btn ghost small" id="cvCancelar">Cancelar</button></div></div>`;
+    $("#cvCancelar").onclick=()=>box.innerHTML="";
+    box.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{
+      const cat=b.dataset.cat;
+      // passo 2 e 3: faixa de peso de entrada e intervalos de dias
+      box.innerHTML=`<div class="card" style="margin:10px 0;padding:12px"><b>Nova curva · ${esc(cat)}</b> · 2. faixa de peso de entrada · 3. valores por intervalo de dias de confinamento
+        <div data-nova>${editorPontos({pesoMin:null,pesoMax:null,pontos:[{diaIni:1,diaFim:null,pv:null}]}, "n")}</div>
+        <div class="row-actions"><button class="btn small" id="cvOk">Adicionar</button><button class="btn ghost small" id="cvCancelar">Cancelar</button><span class="saved" id="cvMsg" style="color:var(--crit)"></span></div></div>`;
+      const nb=box.querySelector("[data-nova]");
+      nb.querySelector(".delcv").remove();
+      const lerNova=()=>({categoria:cat, pesoMin:nb.querySelector("[data-pmin]").value===""?null:+nb.querySelector("[data-pmin]").value, pesoMax:nb.querySelector("[data-pmax]").value===""?null:+nb.querySelector("[data-pmax]").value,
+        pontos:[...nb.querySelectorAll("tbody tr")].map(tr=>{ const i=tr.querySelectorAll("input"); return {diaIni:i[0].value===""?null:+i[0].value, diaFim:i[1].value===""?null:+i[1].value, pv:i[2].value===""?null:+i[2].value}; })});
+      const ligar=()=>{
+        nb.querySelector(".addpt").onclick=()=>{ const c=lerNova(), ult=c.pontos[c.pontos.length-1];
+          nb.querySelector("tbody").insertAdjacentHTML("beforeend", ptRow({diaIni: ult&&ult.diaFim!=null?ult.diaFim+1:"", diaFim:"", pv: ult&&ult.pv!=null?ult.pv:""})); ligar();
+          const novos=nb.querySelectorAll("tbody tr:last-child input"); if(novos[1]) novos[1].focus(); };
+        nb.querySelectorAll(".delpt").forEach(b=>b.onclick=()=>{ b.closest("tr").remove(); });
+      };
+      ligar(); nb.querySelector("[data-pmin]").focus();
+      $("#cvCancelar").onclick=()=>box.innerHTML="";
+      $("#cvOk").onclick=()=>{ const c=lerNova(), erro=validarCurva(c, curvas);
+        if(erro) return $("#cvMsg").textContent=erro;
+        curvas.push(c); abertas.clear(); abertas.add(curvas.length-1); box.innerHTML=""; desenharCurvas();
+        $("#savedMsg").style.color=""; $("#savedMsg").textContent="Curva adicionada. Clique em Salvar e recalcular para usar."; };
+    });
+  };
+  function validarCurva(c, todas){
+    if(c.pesoMin==null || c.pesoMax==null) return "Informe a faixa de peso de entrada.";
+    if(c.pesoMin<0 || c.pesoMax<=c.pesoMin) return "O peso final da faixa precisa ser maior que o inicial.";
+    if(!c.pontos.length) return "Inclua pelo menos um intervalo de dias.";
+    const ps=[...c.pontos].sort((a,b)=>(a.diaIni??0)-(b.diaIni??0));
+    for(const p of ps){
+      if(p.diaIni==null || p.diaFim==null || p.pv==null) return "Preencha dia inicial, dia final e %PV de todos os intervalos.";
+      if(p.diaIni<0 || p.diaFim<p.diaIni) return `Intervalo ${p.diaIni}–${p.diaFim}: o dia final precisa ser maior ou igual ao inicial.`;
+      if(p.pv<=0 || p.pv>6) return `Intervalo ${p.diaIni}–${p.diaFim}: %PV fora do esperado (use valores como 2,35).`;
+    }
+    for(let k=1;k<ps.length;k++) if(ps[k].diaIni<=ps[k-1].diaFim) return `Os intervalos ${ps[k-1].diaIni}–${ps[k-1].diaFim} e ${ps[k].diaIni}–${ps[k].diaFim} se sobrepõem.`;
+    const choca=todas.find(o=>o!==c && o.categoria===c.categoria && c.pesoMin<=o.pesoMax && o.pesoMin<=c.pesoMax);
+    if(choca) return `Já existe curva para ${c.categoria} com entrada de ${fmt(choca.pesoMin,0)}–${fmt(choca.pesoMax,0)} kg, que se sobrepõe a esta faixa.`;
+    return "";
+  }
+  $("#escUnid").onchange=()=>{ $("#escTit").textContent=`Ajuste (${UNID_ESC[$("#escUnid").value]})`; };
   $("#addEsc").onclick=()=>{ $("#tEsc tbody").insertAdjacentHTML("beforeend",escRow({nota:0,ajuste:0})); bindDel(); };
   $("#addCat").onclick=()=>{ $("#tCat tbody").insertAdjacentHTML("beforeend",catRow("","Macho","",false)); bindDel(); $("#tCat tbody tr:last-child input[data-sigla]").focus(); };
   $("#addLim").onclick=()=>{ const p=cfg.limites["Padrão"]||{ontem:5,cinco:8,curva:0.2,escore:3};
     $("#tLim tbody").insertAdjacentHTML("beforeend",limRow("",p,false)); bindDel(); $("#tLim tbody tr:last-child input[data-dieta]").focus(); };
   $("#saveCfg").onclick=()=>{
-    const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curva:[],escore:[],limites:{}};
+    lerCurvas();
+    const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curvas:[],escore:[],escoreUnid:$("#escUnid").value,limites:{}};
     const repetidas=[];
     el.querySelectorAll("#tCat tbody tr").forEach(tr=>{ const sg=tr.querySelector("[data-sigla]").value.trim().toUpperCase(); if(!sg) return;
       if(sg in n.categorias) repetidas.push(sg);
       n.categorias[sg]=tr.querySelector("[data-sexo]").value; const inf=tr.querySelector("[data-info]").value.trim(); if(inf) n.catInfo[sg]=inf; });
-    el.querySelectorAll("#tCurva tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input,select");
-      n.curva.push({sexo:i[0].value,pesoMin:+i[1].value,pesoMax:+i[2].value,diaIni:+i[3].value,diaFim:+i[4].value,pv:+i[5].value}); });
+    for(const c of curvas){ const e=validarCurva(c, curvas);
+      if(e){ $("#savedMsg").style.color="var(--crit)"; $("#savedMsg").textContent=`Curva ${c.categoria}: ${e}`; return; }
+      if(!(c.categoria in n.categorias)){ $("#savedMsg").style.color="var(--crit)"; $("#savedMsg").textContent=`A curva da categoria ${c.categoria} ficou sem a categoria cadastrada. Remova a curva ou mantenha a categoria.`; return; }
+      n.curvas.push({categoria:c.categoria, pesoMin:c.pesoMin, pesoMax:c.pesoMax, pontos:[...c.pontos].sort((a,b)=>a.diaIni-b.diaIni)}); }
     el.querySelectorAll("#tEsc tbody tr").forEach(tr=>{ const i=tr.querySelectorAll("input"); n.escore.push({nota:+i[0].value,ajuste:+i[1].value}); });
     n.escore.sort((a,b)=>a.nota-b.nota);
     el.querySelectorAll("#tLim tbody tr").forEach(tr=>{ const nome=tr.querySelector("[data-dieta]").value.trim(); if(!nome) return;
@@ -1645,8 +1760,6 @@ function renderAdm(){
         <div class="log">${(s.log||[]).map(l=>`<div><b class="${esc(l.status)}">${esc(l.status)}</b> · ${new Date(l.quando).toLocaleString("pt-BR")} · ${esc(l.fazenda_id||"")} — ${esc(l.detalhe||"")}</div>`).join("") || "<div>Sem eventos ainda.</div>"}</div>`;
     }catch(err){ if(err.cod==="sessao") return alertaSessao(); box.textContent = err.cod==="offline" ? "Sem internet para consultar a coleta." : err.message; }
   }
-  function curvaRow(c){ return `<tr><td class="l"><select><option ${c.sexo==="Macho"?"selected":""}>Macho</option><option ${c.sexo==="Fêmea"?"selected":""}>Fêmea</option></select></td>
-    <td>${numIn(c.pesoMin,1,80)}</td><td>${numIn(c.pesoMax,1,80)}</td><td>${numIn(c.diaIni,1,64)}</td><td>${numIn(c.diaFim,1,64)}</td><td>${numIn(c.pv,0.01,74)}</td><td><button class="btn ghost small del" aria-label="Remover">✕</button></td></tr>`; }
   function escRow(e){ return `<tr><td class="l">${numIn(e.nota,0.5,74)}</td><td>${numIn(e.ajuste,0.5,80)}</td><td><button class="btn ghost small del" aria-label="Remover">✕</button></td></tr>`; }
 }
 
