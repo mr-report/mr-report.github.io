@@ -90,6 +90,12 @@ h3 small{font-weight:400;color:var(--ink2);font-size:12px}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 9px;border-radius:999px;white-space:nowrap;font-weight:600}
 .chip.ok{background:var(--good-bg);color:var(--good)}
 .chip.sist{background:#e6ecf5;color:var(--primary)}
+.hist-it{border-top:1px solid var(--line);padding:10px 0;font-size:14px}.hist-it:first-child{border-top:0}
+.hist-it ul{margin:4px 0 0 18px;padding:0;color:var(--ink2);font-size:13px}
+#histBox summary{cursor:pointer}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;overflow:auto;padding:12px}
+.fz-item{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border-top:1px solid var(--line);padding:12px 0}
+.fz-item:first-child{border-top:0}.fz-item.off{opacity:.6}
 details.curva{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;background:var(--card)}
 details.curva summary{cursor:pointer;font-size:14px;list-style:revert}
 details.curva[open] summary{margin-bottom:4px}
@@ -247,7 +253,8 @@ td.l,th.l{text-align:left}
       <img src="logo-icone.png" alt="" class="logo-ic">
       <picture><source srcset="logo-texto-claro.png" media="(prefers-color-scheme: dark)"><img src="logo-texto.png" alt="Mr. Report – Relatórios do rebanho" class="logo-tx"></picture>
     </div>
-    <p>Entre com a senha da sua fazenda.</p>
+    <p>Equipe da fazenda: deixe o usuário em branco e use a senha da fazenda.<br>Técnicos e administradores: usuário (nome.sobrenome) e senha própria.</p>
+    <label class="field"><span>Usuário <small style="color:var(--muted)">(opcional)</small></span><input type="text" id="usr" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="nome.sobrenome"></label>
     <label class="field"><span>Senha</span><input type="password" id="pwd" autocomplete="current-password" required></label>
     <button class="btn block" type="submit" id="btnEntrar">Entrar</button>
     <div class="err" id="loginErr"></div>
@@ -259,6 +266,7 @@ td.l,th.l{text-align:left}
     <div class="bar">
       <div class="brand" id="brand"><span id="brandNome">–</span><select id="farmSel" class="hidden" aria-label="Trocar de fazenda" title="Trocar de fazenda"></select><small id="brandSub"></small></div>
       <select id="dateSel" aria-label="Data do relatório"></select>
+      <button class="btn ghost small hidden" id="minhaSenha" title="Trocar a minha senha">Senha</button>
       <button class="btn ghost small" id="logout">Sair</button>
     </div>
     <div class="sync" id="sync"></div>
@@ -266,9 +274,10 @@ td.l,th.l{text-align:left}
       <button data-tab="vistoria">Vistoria</button>
       <button data-tab="analise">Análise</button>
       <button data-tab="baias">Baias</button>
-      <button data-tab="adm" class="adm-only hidden">Cadastros</button>
-      <button data-tab="comparativo" class="adm-only hidden">Comparativo</button>
+      <button data-tab="adm" class="editor-only hidden">Cadastros</button>
+      <button data-tab="comparativo" class="editor-only hidden">Comparativo</button>
       <button data-tab="fazendas" class="adm-only hidden">Fazendas</button>
+      <button data-tab="pessoas" class="adm-only hidden">Pessoas</button>
     </nav>
   </header>
   <main>
@@ -328,6 +337,7 @@ td.l,th.l{text-align:left}
     <div id="tab-adm" class="hidden"></div>
     <div id="tab-comparativo" class="hidden"></div>
     <div id="tab-fazendas" class="hidden"></div>
+    <div id="tab-pessoas" class="hidden"></div>
   </main>
 </section>
 
@@ -398,7 +408,7 @@ function montar(fid, c){
       dt_entrada: isoParaBRc(b.dt_entrada), dt_abate: isoParaBRc(b.dt_abate)});
   });
   DATA[fid] = { nome: c.nome, relatorios: rel, info };
-  SRV[fid] = { config: c.config, config_atualizado_em: c.config_atualizado_em, gerado_em: c.gerado_em, relatorios: c.relatorios || [], sistema: c.sistema || "tgc" };
+  SRV[fid] = { config: c.config, config_atualizado_em: c.config_atualizado_em, config_atualizado_por: c.config_atualizado_por, gerado_em: c.gerado_em, relatorios: c.relatorios || [], sistema: c.sistema || "tgc" };
   delete cfgCache[fid];
 }
 
@@ -415,7 +425,7 @@ async function sincronizar(fid){
     sistema: (r.fazenda && r.fazenda.sistema) || c.sistema || "tgc",
     baias: (c.baias||[]).filter(b=>b.data_ref < desde && b.data_ref >= corte).concat(r.baias||[]),
     relatorios: (c.relatorios||[]).filter(x=>x.data_ref < desde && x.data_ref >= corte).concat(r.relatorios||[]),
-    config: r.config, config_atualizado_em: r.config_atualizado_em, gerado_em: r.gerado_em
+    config: r.config, config_atualizado_em: r.config_atualizado_em, config_atualizado_por: r.config_atualizado_por, gerado_em: r.gerado_em
   };
   await IDB.set("dados:"+fid, novo);
   montar(fid, novo);
@@ -612,8 +622,10 @@ $("#loginForm").addEventListener("submit", async e=>{
   if(!senha) return;
   $("#btnEntrar").disabled = true; $("#loginErr").textContent = "Entrando…";
   try{
-    const r = await rpc("entrar", {p_senha: senha});
-    if(r && r.erro) throw new ErroAPI(r.erro==="muitas_tentativas" ? "Muitas tentativas erradas. Espere 15 minutos e tente de novo." : "Senha não reconhecida.", "senha");
+    const usuario = $("#usr").value.trim().toLowerCase();
+    const r = usuario ? await rpc("entrar_usuario", {p_usuario: usuario, p_senha: senha}) : await rpc("entrar", {p_senha: senha});
+    if(r && r.erro) throw new ErroAPI(r.erro==="muitas_tentativas" ? "Muitas tentativas erradas. Espere 15 minutos e tente de novo."
+      : usuario ? "Usuário ou senha não reconhecidos." : "Senha não reconhecida.", "senha");
     $("#pwd").value = ""; $("#loginErr").textContent = "";
     LS.set("sessao", r);
     iniciar(r);
@@ -632,9 +644,13 @@ $("#dateSel").onchange=e=>{ S.data=e.target.value; refresh(); };
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 
 function iniciar(sessao){
-  S.sessao = sessao; S.user = {admin: sessao.papel==="adm"};
+  S.sessao = sessao;
+  const papel = sessao.papel==="fazenda" ? "leitor" : sessao.papel;          // sessões antigas
+  S.user = {papel, admin: papel==="adm", editor: papel==="adm" || papel==="tecnico", nome: sessao.nome || "", pessoa: !!sessao.usuario};
   $("#login").classList.add("hidden"); $("#app").classList.remove("hidden");
   document.querySelectorAll(".adm-only").forEach(el=>el.classList.toggle("hidden",!S.user.admin));
+  document.querySelectorAll(".editor-only").forEach(el=>el.classList.toggle("hidden",!S.user.editor));
+  $("#minhaSenha").classList.toggle("hidden", !S.user.pessoa);
   const fz = sessao.fazendas || [];
   preencherSeletor(fz);
   const ultima = LS.get("ultimaFazenda");
@@ -643,11 +659,11 @@ function iniciar(sessao){
   if(fz.length) setFarm(fz.some(f=>f.id===ultima) ? ultima : fz[0].id);
   else if(S.user.admin){ mostrarVazio("Nenhuma fazenda cadastrada ainda."); setTab("fazendas"); }
   else mostrarVazio("Nenhuma fazenda cadastrada ainda.");
-  if(S.user.admin) atualizarFazendasAdm();
+  atualizarFazendasAdm();
 }
 /* ADM: o seletor de fazenda fica no título; a lista vem sempre atualizada do banco */
 function preencherSeletor(fz){
-  const adm = S.user && S.user.admin;
+  const adm = S.user && (S.user.admin || (S.user.editor && fz.length>1));
   $("#farmSel").innerHTML = fz.map(f=>`<option value="${esc(f.id)}">${esc(f.nome)}</option>`).join("");
   $("#farmSel").classList.toggle("hidden", !adm || !fz.length);
   $("#brandNome").classList.toggle("hidden", !!(adm && fz.length));
@@ -655,12 +671,13 @@ function preencherSeletor(fz){
 }
 async function atualizarFazendasAdm(){
   try{
-    const lista = await rpc("adm_listar_fazendas", {p_token:S.sessao.token});
-    const ativas = lista.filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}));
+    // administrador: todas; técnico e equipe: as liberadas (acesso dado ou retirado vale sem sair)
+    const ativas = S.user.admin ? (await rpc("adm_listar_fazendas", {p_token:S.sessao.token})).filter(f=>f.ativa).map(f=>({id:f.id, nome:f.nome}))
+                                : await rpc("minhas_fazendas", {p_token:S.sessao.token});
     S.sessao.fazendas = ativas; LS.set("sessao", S.sessao);
     preencherSeletor(ativas);
     if(ativas.length && !ativas.some(f=>f.id===S.farm)) setFarm(ativas[0].id);   // fazenda apagada ou desativada
-  }catch(e){ /* sem internet ou 04 não instalado: fica com a lista do login */ }
+  }catch(e){ if(e.cod==="sessao") return alertaSessao(); /* sem internet ou banco antigo: fica com a lista do login */ }
 }
 
 let syncMsg = {quando:null, off:false, erro:null, carregando:false};
@@ -769,15 +786,15 @@ function mostrarFazenda(){
   const mantem = datas.includes(atual) && S.dataFarm===id && atual !== S.maisRecente;
   S.data = mantem ? atual : datas[0]; S.dataFarm = id; S.maisRecente = datas[0];
   $("#dateSel").value = S.data;
-  $("#avisoCfg").classList.toggle("hidden", !S.user.admin || !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
+  $("#avisoCfg").classList.toggle("hidden", !S.user.editor || !!(SRV[id] && SRV[id].config && Object.keys(SRV[id].config).length));
   refresh();
 }
-const abaAdm = t => t==="adm" || t==="fazendas" || t==="comparativo";
+const abaAdm = t => t==="adm" || t==="fazendas" || t==="comparativo" || t==="pessoas";
 function setTab(t){
   S.tab=t;
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   const semDados = !S.farm || !DATA[S.farm] || !Object.keys(DATA[S.farm].relatorios).length;
-  ["vistoria","analise","baias","adm","fazendas","comparativo"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
+  ["vistoria","analise","baias","adm","fazendas","comparativo","pessoas"].forEach(x=>$("#tab-"+x).classList.toggle("hidden", x!==t || (!abaAdm(x) && semDados)));
   $("#vazio").classList.toggle("hidden", abaAdm(t) || !semDados || !$("#vazio").textContent);
   if(!abaAdm(t)) LS.set("aba", t);
   document.body.classList.toggle("na-vistoria", t==="vistoria");
@@ -787,11 +804,12 @@ function setTab(t){
   if(t==="adm") renderAdm();
   if(t==="fazendas") renderFazendas();
   if(t==="comparativo") renderComparativo();
+  if(t==="pessoas") renderPessoas();
 }
 function refresh(){
   if(!DATA[S.farm] || !DATA[S.farm].relatorios[S.data]) return;
   S.rows = analisar(S.farm,S.data);
-  $("#brandSub").textContent = S.user.admin ? "ADM" : "";
+  $("#brandSub").textContent = S.user.admin ? "ADM" : S.user.papel==="tecnico" ? "Técnico" : "";
   if(S.tab==="vistoria") renderVistoria();
   if(S.tab==="analise") renderAnalise();
   if(S.tab==="baias") renderBaias();
@@ -1294,7 +1312,7 @@ let rT; window.addEventListener("resize",()=>{ clearTimeout(rT); rT=setTimeout((
 const FASES=[[1,20,"1–20"],[21,40,"21–40"],[41,60,"41–60"],[61,90,"61–90"],[91,120,"91–120"],[121,9999,"121+"]];
 let compCarregando=false;
 async function renderComparativo(){
-  const el=$("#tab-comparativo"); if(!S.user||!S.user.admin) return;
+  const el=$("#tab-comparativo"); if(!S.user||!S.user.editor) return;
   const fz=S.sessao.fazendas||[];
   if(!fz.length){ el.innerHTML=`<div class="card empty">Nenhuma fazenda cadastrada.</div>`; return; }
   el.innerHTML=`<div class="loading" id="compStatus">Carregando dados das fazendas…</div>`;
@@ -1572,7 +1590,7 @@ function formFazenda(f){
 /* ---------- cadastros (ADM) ---------- */
 function renderAdm(){
   if(!S.farm) return;
-  if(!S.user||!S.user.admin) return;
+  if(!S.user||!S.user.editor) return;
   const cfg=JSON.parse(JSON.stringify(getConfig(S.farm)));
   const el=$("#tab-adm");
   const numIn=(v,step=0.01,w=80)=>`<input type="number" step="${step}" value="${v}" style="width:${w}px">`;
@@ -1587,7 +1605,7 @@ function renderAdm(){
     <td>${numIn(l.ontem,0.5)}</td><td>${numIn(l.cinco,0.5)}</td><td>${numIn(l.curva,0.05)}</td><td>${numIn(l.escore,0.5)}</td><td>${d==="Padrão"?"":del(fixo,"Esta dieta aparece nos relatórios")}</td></tr>`;
   el.innerHTML=`
   <div class="adm-section card"><h3 style="margin-top:0">Coleta automática</h3><div id="statusColeta" class="loading">Carregando situação da coleta…</div></div>
-  <p style="font-size:13px;color:var(--ink2)">Cadastros de <b>${esc((DATA[S.farm]||{}).nome||S.farm)}</b>. Cada confinamento tem os seus.${SRV[S.farm]&&SRV[S.farm].config_atualizado_em?" Último salvamento: "+new Date(SRV[S.farm].config_atualizado_em).toLocaleString("pt-BR")+".":" <b>Ainda com valores de exemplo.</b>"}</p>
+  <p style="font-size:13px;color:var(--ink2)">Cadastros de <b>${esc((DATA[S.farm]||{}).nome||S.farm)}</b>. Cada confinamento tem os seus.${SRV[S.farm]&&SRV[S.farm].config_atualizado_em?" Último salvamento: "+new Date(SRV[S.farm].config_atualizado_em).toLocaleString("pt-BR")+(SRV[S.farm].config_atualizado_por?" por <b>"+esc(SRV[S.farm].config_atualizado_por)+"</b>":"")+".":" <b>Ainda com valores de exemplo.</b>"}</p>
   <div class="adm-section card">
     <h3 style="margin-top:0">Categorias (CT → sexo)</h3>
     <p class="help">Siglas encontradas nos relatórios desta fazenda e as que você acrescentar (por exemplo, uma categoria que ainda vai entrar). O título da terceira coluna também é editável.</p>
@@ -1625,7 +1643,9 @@ function renderAdm(){
     <button class="btn" id="saveCfg">Salvar e recalcular</button>
     <button class="btn ghost" id="resetCfg">Preencher com exemplos</button>
     <span class="saved" id="savedMsg"></span>
-  </div>`;
+  </div>
+  <details class="adm-section card" id="histBox"><summary><b>Histórico de alterações</b> <span class="help">quem salvou, quando e o que mudou</span></summary><div id="histLista" class="loading">Carregando…</div></details>`;
+  $("#histBox").ontoggle=()=>{ if($("#histBox").open) carregarHistorico(); };
   const bindDel=()=>el.querySelectorAll(".del").forEach(b=>b.onclick=()=>b.closest("tr").remove());
   bindDel();
   /* ----- curvas: lista recolhida + assistente "Adicionar curva" (categoria → faixa de peso → intervalos de dias) ----- */
@@ -1739,7 +1759,7 @@ function renderAdm(){
     $("#saveCfg").disabled=true; $("#savedMsg").textContent="Salvando…";
     rpc("salvar_config",{p_token:S.sessao.token,p_fazenda:S.farm,p_dados:n}).then(async quando=>{
       const c = await IDB.get("dados:"+S.farm) || {nome:(DATA[S.farm]||{}).nome, baias:[], relatorios:[]};
-      c.config = n; c.config_atualizado_em = quando; await IDB.set("dados:"+S.farm, c); montar(S.farm, c);
+      c.config = n; c.config_atualizado_em = quando; c.config_atualizado_por = S.user.nome || "Administrador"; await IDB.set("dados:"+S.farm, c); montar(S.farm, c);
       refresh(); renderAdm(); $("#savedMsg").textContent="Salvo para todos os usuários. Análises recalculadas.";
     }).catch(err=>{
       if(err.cod==="sessao") return alertaSessao();
@@ -1749,6 +1769,26 @@ function renderAdm(){
   $("#resetCfg").onclick=()=>{ const keep=SRV[S.farm]; SRV[S.farm]={...(keep||{}),config:null}; delete cfgCache[S.farm]; renderAdm(); SRV[S.farm]=keep; delete cfgCache[S.farm];
     $("#savedMsg").textContent="Valores de exemplo preenchidos. Clique em Salvar para usar."; };
   carregarStatusColeta();
+  async function carregarHistorico(){
+    const box=$("#histLista"); if(!box) return;
+    try{
+      const hs=await rpc("historico_config",{p_token:S.sessao.token,p_fazenda:S.farm});
+      box.className="";
+      if(!hs.length){ box.innerHTML=`<p class="help">Nenhum salvamento registrado ainda (o histórico começa a partir desta versão do app).</p>`; return; }
+      box.innerHTML=`<div class="hist">${hs.map((h,i)=>{ const ant=hs[i+1]; const mud=ant?diffConfig(ant.dados,h.dados):["primeira versão registrada"];
+        return `<div class="hist-it"><div><b>${esc(h.autor)}</b> ${esc(h.acao)} · ${new Date(h.quando).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+          ${i>0&&S.user.admin?`<button class="btn ghost small" data-rest="${h.id}" style="float:right">Restaurar esta versão</button>`:""}</div>
+          <ul>${(mud.length?mud:["sem mudanças"]).map(m=>`<li>${esc(m)}</li>`).join("")}</ul></div>`; }).join("")}</div>`;
+      box.querySelectorAll("[data-rest]").forEach(b=>b.onclick=async()=>{
+        if(!confirm("Voltar os cadastros desta fazenda para esta versão? A versão atual continua no histórico.")) return;
+        b.disabled=true;
+        try{ await rpc("restaurar_config",{p_token:S.sessao.token,p_fazenda:S.farm,p_id:+b.dataset.rest});
+          delete cfgCache[S.farm]; await sincronizar(S.farm); refresh(); renderAdm();
+          $("#savedMsg").textContent="Versão restaurada. Análises recalculadas."; }
+        catch(err){ if(err.cod==="sessao") return alertaSessao(); b.disabled=false; alert("Não foi possível restaurar: "+err.message); }
+      });
+    }catch(err){ if(err.cod==="sessao") return alertaSessao(); box.className=""; box.textContent = err.cod==="offline" ? "Sem internet para ver o histórico." : err.message; }
+  }
   async function carregarStatusColeta(){
     const box = $("#statusColeta"); if(!box) return;
     try{
@@ -1762,6 +1802,120 @@ function renderAdm(){
   }
   function escRow(e){ return `<tr><td class="l">${numIn(e.nota,0.5,74)}</td><td>${numIn(e.ajuste,0.5,80)}</td><td><button class="btn ghost small del" aria-label="Remover">✕</button></td></tr>`; }
 }
+
+/* resumo do que mudou entre duas versões dos cadastros */
+function diffConfig(a, b){
+  a=a||{}; b=b||{}; const out=[];
+  const ca=a.categorias||{}, cb=b.categorias||{};
+  Object.keys(cb).filter(k=>!(k in ca)).forEach(k=>out.push(`categoria ${k} incluída (${cb[k]})`));
+  Object.keys(ca).filter(k=>!(k in cb)).forEach(k=>out.push(`categoria ${k} removida`));
+  Object.keys(cb).filter(k=>k in ca && ca[k]!==cb[k]).forEach(k=>out.push(`categoria ${k}: ${ca[k]} → ${cb[k]}`));
+  const chave=c=>`${c.categoria} ${c.pesoMin}–${c.pesoMax} kg`, ma=new Map((a.curvas||[]).map(c=>[chave(c),c])), mb=new Map((b.curvas||[]).map(c=>[chave(c),c]));
+  [...mb.keys()].filter(k=>!ma.has(k)).forEach(k=>out.push(`curva ${k} adicionada`));
+  [...ma.keys()].filter(k=>!mb.has(k)).forEach(k=>out.push(`curva ${k} removida`));
+  [...mb.keys()].filter(k=>ma.has(k) && JSON.stringify(ma.get(k).pontos)!==JSON.stringify(mb.get(k).pontos)).forEach(k=>out.push(`curva ${k}: intervalos alterados`));
+  if((a.escoreUnid||"%")!==(b.escoreUnid||"%")) out.push(`escore: ajuste em ${UNID_ESC[a.escoreUnid||"%"]} → ${UNID_ESC[b.escoreUnid||"%"]}`);
+  const ea=new Map((a.escore||[]).map(e=>[e.nota,e.ajuste])), eb=new Map((b.escore||[]).map(e=>[e.nota,e.ajuste]));
+  [...eb.keys()].forEach(n=>{ if(!ea.has(n)) out.push(`escore: nota ${fmt(n,1)} incluída (${fmt(eb.get(n),2)})`); else if(ea.get(n)!==eb.get(n)) out.push(`escore: nota ${fmt(n,1)} ${fmt(ea.get(n),2)} → ${fmt(eb.get(n),2)}`); });
+  [...ea.keys()].filter(n=>!eb.has(n)).forEach(n=>out.push(`escore: nota ${fmt(n,1)} removida`));
+  const la=a.limites||{}, lb=b.limites||{}, nomes={ontem:"× ontem",cinco:"× média",curva:"× curva",escore:"escore"};
+  Object.keys(lb).forEach(d=>{ if(!(d in la)){ out.push(`limites: dieta ${d} incluída`); return; }
+    Object.keys(nomes).forEach(k=>{ if(la[d][k]!==lb[d][k]) out.push(`limites ${d}: ${nomes[k]} ${fmt(la[d][k],2)} → ${fmt(lb[d][k],2)}`); }); });
+  Object.keys(la).filter(d=>!(d in lb)).forEach(d=>out.push(`limites: dieta ${d} removida`));
+  if((a.catInfoTitulo||"")!==(b.catInfoTitulo||"") || JSON.stringify(a.catInfo||{})!==JSON.stringify(b.catInfo||{})) out.push("informações das categorias alteradas");
+  return out.length>8 ? out.slice(0,8).concat([`e mais ${out.length-8} mudanças`]) : out;
+}
+
+/* ---------- pessoas (ADM): administradores e técnicos com nome, usuário e senha próprios ---------- */
+const ERROS_PES = {
+  nome_obrigatorio:"Informe o nome.", usuario_invalido_formato:"O usuário deve ser nome.sobrenome (letras minúsculas e números, sem acento e sem espaço).",
+  usuario_repetido:"Esse usuário já existe.", senha_curta_pessoa:"A senha precisa ter pelo menos 8 caracteres.", senha_obrigatoria:"Informe a senha inicial.",
+  nao_pode_se_rebaixar:"Você não pode tirar o seu próprio acesso de administrador nem se desativar.", ultimo_adm:"Precisa sobrar pelo menos um administrador ativo.",
+  papel_invalido:"Escolha o tipo de acesso.", pessoa_inexistente:"Pessoa não encontrada. Recarregue a lista."
+};
+const msgPes = err => { const k=Object.keys(ERROS_PES).find(k=>err.message.includes(k)); return k?ERROS_PES[k]:err.message; };
+const semAcento = s => s.normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+async function renderPessoas(){
+  const el=$("#tab-pessoas"); if(!S.user||!S.user.admin) return;
+  el.innerHTML=`<div class="loading">Carregando pessoas…</div>`;
+  let lista, fazs;
+  try{ [lista, fazs] = await Promise.all([rpc("adm_listar_pessoas",{p_token:S.sessao.token}), rpc("adm_listar_fazendas",{p_token:S.sessao.token})]); }
+  catch(err){ if(err.cod==="sessao") return alertaSessao();
+    el.innerHTML=`<div class="card empty">${err.message.includes("adm_listar_pessoas")||err.message.includes("PGRST202")?"Rode o arquivo 07_pessoas.sql no Supabase para usar esta aba.":esc(err.message)}</div>`; return; }
+  const nomeFaz = id => (fazs.find(f=>f.id===id)||{nome:id}).nome;
+  el.innerHTML=`
+    <div class="adm-section card">
+      <h3 style="margin-top:0">Pessoas</h3>
+      <p class="help"><b>Administrador</b>: todas as fazendas, Cadastros, Fazendas, Pessoas e restaurar versões. <b>Técnico</b>: só as fazendas marcadas, com Cadastros e Comparativo.
+        A equipe da fazenda (leitura) continua entrando só com a senha da fazenda.</p>
+      <div id="pesForm"></div>
+      <div class="lista-fz">${lista.map(p=>`
+        <div class="fz-item${p.ativa?"":" off"}">
+          <div><b>${esc(p.nome)}</b> <span class="chip ${p.papel==="adm"?"sist":"ok"}">${p.papel==="adm"?"Administrador":"Técnico"}</span>${p.ativa?"":' <span class="chip medio">desativado</span>'}
+            <div class="help" style="margin:2px 0 0">${esc(p.usuario)} · ${p.papel==="adm"?"todas as fazendas":(p.fazendas.length?p.fazendas.map(nomeFaz).map(esc).join(", "):"nenhuma fazenda marcada")}
+              · ${p.ultimo_acesso?"último acesso "+new Date(p.ultimo_acesso).toLocaleDateString("pt-BR"):"ainda não entrou"}</div></div>
+          <button class="btn ghost small" data-pes="${p.id}">Editar</button></div>`).join("") || `<p class="help">Nenhuma pessoa cadastrada.</p>`}</div>
+      <div class="row-actions"><button class="btn" id="pesNova">+ Nova pessoa</button></div>
+    </div>`;
+  $("#pesNova").onclick=()=>formPessoa(null);
+  el.querySelectorAll("[data-pes]").forEach(b=>b.onclick=()=>formPessoa(lista.find(p=>p.id===+b.dataset.pes)));
+  function formPessoa(p){
+    const nova=!p; p=p||{nome:"",usuario:"",papel:"tecnico",ativa:true,fazendas:[]};
+    $("#pesForm").innerHTML=`<div class="card" style="margin:0 0 14px;padding:14px">
+      <b>${nova?"Nova pessoa":"Editar "+esc(p.nome)}</b>
+      <div class="grid2" style="gap:10px;margin-top:10px">
+        <label class="field"><span>Nome</span><input type="text" id="peNome" value="${esc(p.nome)}" placeholder="ex.: João da Silva"></label>
+        <label class="field"><span>Usuário (nome.sobrenome)</span><input type="text" id="peUsr" value="${esc(p.usuario)}" autocapitalize="none" spellcheck="false" placeholder="joao.silva"></label>
+        <label class="field"><span>${nova?"Senha inicial":"Nova senha (deixe em branco para manter)"}</span><input type="password" id="peSenha" autocomplete="new-password" placeholder="mínimo 8 caracteres"></label>
+        <label class="field"><span>Tipo de acesso</span><select id="pePapel"><option value="tecnico" ${p.papel==="tecnico"?"selected":""}>Técnico</option><option value="adm" ${p.papel==="adm"?"selected":""}>Administrador</option></select></label>
+      </div>
+      <div id="peFazBox" style="margin-top:10px"><span class="help">Fazendas que esta pessoa pode ver e editar os Cadastros:</span>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px">${fazs.map(f=>`<label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" value="${esc(f.id)}" ${p.fazendas.includes(f.id)?"checked":""}>${esc(f.nome)}${f.ativa?"":" (desativada)"}</label>`).join("")}</div></div>
+      ${nova?"":`<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px"><input type="checkbox" id="peAtiva" ${p.ativa?"checked":""}> Acesso ativo</label>`}
+      <div class="row-actions"><button class="btn" id="peSalvar">Salvar</button><button class="btn ghost" id="peCancelar">Cancelar</button><span class="saved" id="peMsg" style="color:var(--crit)"></span></div></div>`;
+    const usr=$("#peUsr");
+    if(nova) $("#peNome").oninput=()=>{ if(!usr.dataset.mexeu){ const ps=semAcento($("#peNome").value.trim().toLowerCase()).replace(/[^a-z0-9 ]/g,"").split(/\s+/).filter(Boolean);
+      usr.value = ps.length>1 ? ps[0]+"."+ps[ps.length-1] : (ps[0]||""); } };
+    usr.oninput=()=>{ usr.dataset.mexeu = usr.value ? "1" : ""; };
+    const mostraFaz=()=>$("#peFazBox").classList.toggle("hidden", $("#pePapel").value==="adm");
+    $("#pePapel").onchange=mostraFaz; mostraFaz();
+    $("#peCancelar").onclick=()=>$("#pesForm").innerHTML="";
+    $("#peSalvar").onclick=async()=>{
+      const marcadas=[...$("#peFazBox").querySelectorAll("input:checked")].map(i=>i.value), papel=$("#pePapel").value;
+      if(papel==="tecnico" && !marcadas.length) return $("#peMsg").textContent="Marque pelo menos uma fazenda para o técnico.";
+      $("#peSalvar").disabled=true; $("#peMsg").textContent="";
+      try{
+        await rpc("adm_salvar_pessoa",{p_token:S.sessao.token,p_id:nova?null:p.id,p_nome:$("#peNome").value.trim(),p_usuario:semAcento($("#peUsr").value.trim().toLowerCase()),
+          p_senha:$("#peSenha").value,p_papel:papel,p_ativa:nova?true:$("#peAtiva").checked,p_fazendas:papel==="tecnico"?marcadas:[]});
+        renderPessoas();
+      }catch(err){ if(err.cod==="sessao") return alertaSessao(); $("#peMsg").textContent=msgPes(err); $("#peSalvar").disabled=false; }
+    };
+    $("#peNome").focus();
+  }
+}
+
+/* ---------- minha senha (administradores e técnicos) ---------- */
+$("#minhaSenha").onclick=()=>{
+  const box=document.createElement("div"); box.className="modal-bg";
+  box.innerHTML=`<form class="card" style="max-width:360px;margin:12vh auto;padding:18px" id="msForm">
+    <h3 style="margin-top:0">Trocar a minha senha</h3>
+    <label class="field"><span>Senha atual</span><input type="password" id="msAtual" autocomplete="current-password" required></label>
+    <label class="field"><span>Nova senha (mínimo 8 caracteres)</span><input type="password" id="msNova" autocomplete="new-password" required></label>
+    <label class="field"><span>Repita a nova senha</span><input type="password" id="msNova2" autocomplete="new-password" required></label>
+    <div class="row-actions"><button class="btn" type="submit">Trocar</button><button class="btn ghost" type="button" id="msFechar">Cancelar</button></div>
+    <div class="err" id="msMsg"></div></form>`;
+  document.body.appendChild(box);
+  const fechar=()=>box.remove(); $("#msFechar").onclick=fechar; box.onclick=e=>{ if(e.target===box) fechar(); };
+  $("#msForm").onsubmit=async e=>{ e.preventDefault();
+    if($("#msNova").value!==$("#msNova2").value) return $("#msMsg").textContent="As duas senhas novas não são iguais.";
+    try{ await rpc("trocar_senha",{p_token:S.sessao.token,p_atual:$("#msAtual").value,p_nova:$("#msNova").value});
+      $("#msForm").innerHTML=`<h3 style="margin-top:0">Senha trocada</h3><p class="help">Os outros aparelhos em que você estava conectado foram desconectados.</p><div class="row-actions"><button class="btn" type="button" id="msOk">Ok</button></div>`;
+      $("#msOk").onclick=fechar; }
+    catch(err){ if(err.cod==="sessao") return alertaSessao();
+      $("#msMsg").textContent = err.message.includes("senha_atual_errada") ? "Senha atual errada." : err.message.includes("senha_curta_pessoa") ? ERROS_PES.senha_curta_pessoa : err.message; }
+  };
+  $("#msAtual").focus();
+};
 
 /* ---------- início ---------- */
 (function(){

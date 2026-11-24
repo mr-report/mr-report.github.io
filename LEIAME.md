@@ -122,6 +122,15 @@ pedir ao GitHub que rode o robô.
 4. Robô: PDF com mais de 60 páginas, mais de 15 MB, data no futuro, corrompido ou que demore mais de 90 s
    é recusado e avisado, sem travar as outras fazendas. No filtro de remetente vale só o endereço do e-mail.
 
+### 8. Pessoas: administradores e técnicos com nome
+1. No Supabase (SQL Editor), rode `supabase/07_pessoas.sql` inteiro (depois de recarregar o app).
+2. Na mesma tela, rode só a última linha do arquivo, trocando pelo seu nome e usuário (nome.sobrenome):
+   `select public.definir_primeiro_adm('Seu Nome', 'nome.sobrenome');` – a senha é a de administrador atual.
+   A partir daí, a senha de administrador sozinha não entra mais: use usuário + senha.
+3. Aba **Pessoas** (administrador): cadastre técnicos (fazendas marcadas, Cadastros e Comparativo) e outros administradores.
+4. A equipe da fazenda continua entrando só com a senha da fazenda (Vistoria, Análise, Baias, Inserir PDF, Atualizar).
+5. Cadastros guarda quem salvou e quando; "Histórico de alterações" mostra o que mudou e o administrador pode restaurar uma versão.
+
 ## Manutenção
 - **Nova fazenda**: no app, aba **Fazendas (ADM) → + Nova fazenda**. Preencha nome, senha da equipe, e-mail e senha de app.
   Não precisa mexer no Supabase nem no GitHub.
