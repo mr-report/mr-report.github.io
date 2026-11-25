@@ -313,13 +313,13 @@ td.l,th.l{text-align:left}
         <span id="aResumo" style="font-size:12px;color:var(--ink2)"></span>
       </div>
       <div class="kpis" id="anKpis"></div>
-      <div class="an-grid c2">
-        <div class="card"><h3>Alertas do dia</h3><div class="alerts an-scroll" id="anAlerts"></div></div>
-        <div class="card"><div class="vt-sec-h"><h3 style="margin:0" id="scTit">Consumo × dias de cocho</h3><div class="seg" id="scMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
-      </div>
       <div class="card" style="margin-bottom:12px">
         <h3>Mapa de variação do consumo <small id="heatSub">MS do dia × média dos dias anteriores do relatório, por relatório · toque numa célula para abrir a baia</small></h3>
         <div class="heat" id="anHeat"></div>
+      </div>
+      <div class="an-grid c2">
+        <div class="card"><h3>Alertas do dia</h3><div class="alerts an-scroll" id="anAlerts"></div></div>
+        <div class="card"><div class="vt-sec-h"><h3 style="margin:0" id="scTit">Consumo × dias de cocho</h3><div class="seg" id="scMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="chart" id="anScatter"></div><div class="legend" id="anScatterLeg"></div></div>
       </div>
       <div class="an-grid c2b">
         <div class="card"><div class="vt-sec-h"><h3 style="margin:0">Comparar curvas de consumo <small>escolha até 6 baias</small></h3><div class="seg" id="cmpMod"><button data-m="ms">kg MS</button><button data-m="pv">%PV</button></div></div><div class="cmp-sel" id="anCmpSel"></div><div class="chart" id="anCmp"></div><div class="legend" id="anCmpLeg"></div></div>
@@ -995,10 +995,6 @@ function renderVistoria(){
           <div class="tile"><span>Dias de cocho</span><b>${r.dias_conf??"–"}</b><small>entrada ${esc(r.dt_entrada||"–")}${r.dt_abate?" · abate "+esc(r.dt_abate):""}</small></div>
           <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
         </div>
-        <div class="tiles t2" style="margin-top:8px">
-          <div class="tile"><span>Diária</span><b>${r.diaria!=null?brl(r.diaria):"–"}</b><small>${r.diaria!=null?"alimentação "+brl(r.diariaAlim)+(r.custoOp?" + operacional "+brl(r.custoOp):""):"sem custo da dieta"}</small></div>
-          <div class="tile"><span>Custo do dia da baia</span><b>${r.diaria!=null?brl(r.diaria*r.cab,0):"–"}</b><small>${r.cab} cab</small></div>
-        </div>
       </section>
 ${r.temCocho?`      <section class="vt-sec">
         <h3>Leitura de cocho</h3>
@@ -1012,6 +1008,13 @@ ${r.temCocho?`      <section class="vt-sec">
           <div class="tile"><span>Desvio</span><b class="${dirCls(r.desvioPct)}">${r.desvioKg==null?"–":(r.desvioKg>0?"+":"")+fmt(r.desvioKg)+" kg"}</b><small>${r.desvioPct==null?"–":pct(r.desvioPct)}</small></div>
         </div>
       </section>` : ""}
+      <section class="vt-sec">
+        <h3>Custos</h3>
+        <div class="tiles t2">
+          <div class="tile"><span>Diária</span><b>${r.diaria!=null?brl(r.diaria):"–"}</b><small>${r.diaria!=null?"alimentação "+brl(r.diariaAlim)+(r.custoOp?" + operacional "+brl(r.custoOp):""):"sem custo da dieta"}</small></div>
+          <div class="tile"><span>Custo do dia da baia</span><b>${r.diaria!=null?brl(r.diaria*r.cab,0):"–"}</b><small>${r.cab} cab</small></div>
+        </div>
+      </section>
       <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
         <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
     </div>`}
@@ -1086,13 +1089,6 @@ function geralHTML(){
           <div class="tile"><span>vs média ${J()} dias</span><b class="${dirCls(v5.p)}">${seta(v5.p)}${v5.p==null?"–":pct(v5.p)}</b><small>${v5.kg==null?"–":(v5.kg>0?"+":"")+fmt(v5.kg)+" kg/cab"}</small></div>
         </div>
       </section>
-      <section class="vt-sec">
-        <h3>Custo de alimentação</h3>
-        ${comD.length ? `<div class="tiles t2">
-          <div class="tile"><span>Diária média</span><b>${brl(custoDia/cabD)}</b><small>por cabeça${cfg.custoOp>0?" · inclui "+brl(cfg.custoOp)+" operacional":""}</small></div>
-          <div class="tile"><span>Custo do dia</span><b>${brl(custoDia,0)}</b><small>${cabD.toLocaleString("pt-BR")} cab${cabD<cab?" (dietas sem custo ficam de fora)":""}</small></div>
-        </div>` : `<p class="note" style="margin:0">Cadastre o custo do kg de MS das dietas em Cadastros → Limites por dieta para ver a diária.</p>`}
-      </section>
       ${(()=>{ const rd=R.filter(r=>r.desvioKg!=null); if(!rd.length) return "";
         const kg=media(rd,"desvioKg"), pr=media(rd,"msPrev"), abs=rd.reduce((s,r)=>s+Math.abs(r.desvioPct)*r.cab,0)/rd.reduce((s,r)=>s+r.cab,0);
         return `<section class="vt-sec">
@@ -1102,6 +1098,13 @@ function geralHTML(){
           <div class="tile"><span>Desvio absoluto</span><b>${fmt(abs,1)}%</b><small>média sem sinal</small></div>
           <div class="tile"><span>Baias</span><b>${rd.length}</b><small>com nota e consumo de ontem</small></div>
         </div></section>`; })()}
+      <section class="vt-sec">
+        <h3>Custo de alimentação</h3>
+        ${comD.length ? `<div class="tiles t2">
+          <div class="tile"><span>Diária média</span><b>${brl(custoDia/cabD)}</b><small>por cabeça${cfg.custoOp>0?" · inclui "+brl(cfg.custoOp)+" operacional":""}</small></div>
+          <div class="tile"><span>Custo do dia</span><b>${brl(custoDia,0)}</b><small>${cabD.toLocaleString("pt-BR")} cab${cabD<cab?" (dietas sem custo ficam de fora)":""}</small></div>
+        </div>` : `<p class="note" style="margin:0">Cadastre o custo do kg de MS das dietas em Cadastros → Limites por dieta para ver a diária.</p>`}
+      </section>
       <section class="vt-sec">
         <div class="vt-sec-h"><h3>Consumo por dias de cocho</h3><div class="seg" id="gSeg"><button data-m="ms" class="${G.modo==="ms"?"on":""}">kg MS</button><button data-m="pv" class="${G.modo==="pv"?"on":""}">%PV</button></div></div>
         <div class="seg" id="gPer" style="margin:2px 0 6px"><button data-p="hoje" class="${G.periodo==="hoje"?"on":""}">Hoje</button><button data-p="todos" class="${G.periodo==="todos"?"on":""}">Todos os relatórios</button></div>
