@@ -168,6 +168,12 @@ body.na-vistoria header{position:static}
 .vt,.vt-card,.vt-sec{min-width:0;max-width:100%}.vt-card .tablewrap{max-width:100%}
 #gTab td:nth-child(2){white-space:normal;min-width:110px;max-width:260px;text-align:left}
 .vt-card table td.l{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.g-filtros{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:4px 0 8px;font-size:13px;color:var(--ink2)}
+.g-filtros input[type=date]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 8px;margin-left:4px}
+.g-cats{position:relative}.g-cats summary{cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--card);color:var(--ink);list-style:none;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.g-cats summary::after{content:" ▾";color:var(--muted)}.g-cats[open] summary::after{content:" ▴"}
+.g-cats-lista{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:200px;max-height:260px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.g-cats-lista label{display:flex;gap:8px;align-items:center;padding:5px 0;color:var(--ink);font-size:14px}.g-cats-lista small{color:var(--muted)}
 .g-alertas{display:flex;flex-wrap:wrap;gap:6px}.g-alertas button{border:0;cursor:pointer;font-size:13px;padding:5px 10px}
 .tile.cmp.alto{background:var(--crit-bg);border-color:transparent} .tile.cmp.medio{background:var(--warn-bg);border-color:transparent}
 @media (prefers-color-scheme:dark){.tile.cmp.medio b{color:var(--warn)}}
@@ -1040,24 +1046,45 @@ ${r.temCocho?`      <section class="vt-sec">
 const dirCls = v => v==null||isNaN(v) ? "" : v>0.05 ? "up" : v<-0.05 ? "down" : "";
 
 /* ---------- Baia geral: panorama do confinamento ---------- */
-const G = {modo:"ms", periodo:"hoje"};
+const G = {modo:"ms", farm:null, de:null, ate:null, cats:null, aberto:false};   // cats null = todas as categorias
 // médias ponderadas por cabeça dos animais com o mesmo número de dias de cocho
-function mediasPorDia(linhas){
+function mediasPorDia(linhas, cfg){
   const g=new Map();
   linhas.forEach(r=>{ if(r.dias_conf==null || r.cons_dia_ms==null || !r.cab) return;
-    const o=g.get(r.dias_conf)||{dias:r.dias_conf,cab:0,baias:new Set(),ms:0,mn:0,pv:0,cabPv:0,dia:0,cabDia:0};
-    o.cab+=r.cab; o.baias.add(r.curral); o.ms+=r.cons_dia_ms*r.cab; o.mn+=(r.cons_dia_mn||0)*r.cab;
+    const o=g.get(r.dias_conf)||{dias:r.dias_conf,cab:0,baias:new Set(),ms:0,mn:0,pv:0,cabPv:0,dia:0,cabDia:0,epv:0,cabEpv:0,ekg:0,cabEkg:0};
+    o.cab+=r.cab; o.baias.add(r.curral+"·"+r.lote); o.ms+=r.cons_dia_ms*r.cab; o.mn+=(r.cons_dia_mn||0)*r.cab;
     if(r.cons_dia_pv!=null){ o.pv+=r.cons_dia_pv*r.cab; o.cabPv+=r.cab; }
     if(r.diaria!=null){ o.dia+=r.diaria*r.cab; o.cabDia+=r.cab; }
+    if(cfg){ const e=esperado(cfg, r).pv;                       // curva esperada cadastrada, na mesma média
+      if(e!=null){ o.epv+=e*r.cab; o.cabEpv+=r.cab; if(r.peso_atual_prj){ o.ekg+=e/100*r.peso_atual_prj*r.cab; o.cabEkg+=r.cab; } } }
     g.set(r.dias_conf,o); });
   return [...g.values()].sort((a,b)=>a.dias-b.dias).map(o=>({dias:o.dias, cab:o.cab, baias:[...o.baias].sort(), nBaias:o.baias.size,
-    ms:o.ms/o.cab, mn:o.mn/o.cab, pv:o.cabPv?o.pv/o.cabPv:null, diaria:o.cabDia?o.dia/o.cabDia:null}));
+    ms:o.ms/o.cab, mn:o.mn/o.cab, pv:o.cabPv?o.pv/o.cabPv:null, diaria:o.cabDia?o.dia/o.cabDia:null,
+    espPv:o.cabEpv?o.epv/o.cabEpv:null, espMs:o.cabEkg?o.ekg/o.cabEkg:null}));
 }
-function linhasPeriodo(){
+const brParaIso = s => { const [d,m,y]=s.split("/"); return `${y}-${m}-${d}`; };
+// todas as baias que passaram pelo confinamento no período (De … até …), das categorias escolhidas
+function linhasPeriodo(de, ate, cats){
   const cfg=getConfig(S.farm), out=[];
-  Object.entries(DATA[S.farm].relatorios).forEach(([d,rs])=>rs.forEach(r=>{ const c=custoDe(cfg,r.racao);
-    out.push({...r, diaria: c!=null&&r.cons_dia_ms!=null ? c*r.cons_dia_ms + (cfg.custoOp>0?cfg.custoOp:0) : null}); }));
+  Object.entries(DATA[S.farm].relatorios).forEach(([d,rs])=>{ const iso=brParaIso(d); if((de&&iso<de)||(ate&&iso>ate)) return;
+    rs.forEach(r=>{ if(cats && !cats.includes(String(r.ct))) return; const c=custoDe(cfg,r.racao);
+      out.push({...r, diaria: c!=null&&r.cons_dia_ms!=null ? c*r.cons_dia_ms + (cfg.custoOp>0?cfg.custoOp:0) : null}); }); });
   return out;
+}
+function filtrosCurvaGeral(cfg){
+  const datas=Object.keys(DATA[S.farm].relatorios).map(brParaIso).sort();
+  if(G.farm!==S.farm){ G.farm=S.farm; G.de=datas[0]; G.ate=datas[datas.length-1]; G.cats=null; }
+  const cats=Object.keys(cfg.categorias).sort();
+  const txt = !G.cats ? "Todas as categorias" : G.cats.length ? G.cats.join(", ") : "Nenhuma categoria";
+  return `<div class="g-filtros">
+    <label>De <input type="date" id="gDe" value="${G.de||""}" min="${datas[0]||""}" max="${datas[datas.length-1]||""}"></label>
+    <label>até <input type="date" id="gAte" value="${G.ate||""}" min="${datas[0]||""}" max="${datas[datas.length-1]||""}"></label>
+    <details class="g-cats" id="gCats" ${G.aberto?"open":""}><summary>${esc(txt)}</summary>
+      <div class="g-cats-lista">
+        <label><input type="checkbox" data-todas ${!G.cats?"checked":""}> <b>Todas</b></label>
+        ${cats.map(c=>`<label><input type="checkbox" value="${esc(c)}" ${!G.cats||G.cats.includes(c)?"checked":""}> ${esc(c)}${cfg.categorias[c]?` <small>${esc(cfg.categorias[c])}</small>`:""}</label>`).join("") || `<span class="help">Nenhuma categoria cadastrada.</span>`}
+      </div></details>
+  </div>`;
 }
 function geralHTML(){
   const R=S.rows, cfg=getConfig(S.farm);
@@ -1106,8 +1133,8 @@ function geralHTML(){
         </div>` : `<p class="note" style="margin:0">Cadastre o custo do kg de MS das dietas em Cadastros → Limites por dieta para ver a diária.</p>`}
       </section>
       <section class="vt-sec">
-        <div class="vt-sec-h"><h3>Consumo por dias de cocho</h3><div class="seg" id="gSeg"><button data-m="ms" class="${G.modo==="ms"?"on":""}">kg MS</button><button data-m="pv" class="${G.modo==="pv"?"on":""}">%PV</button></div></div>
-        <div class="seg" id="gPer" style="margin:2px 0 6px"><button data-p="hoje" class="${G.periodo==="hoje"?"on":""}">Hoje</button><button data-p="todos" class="${G.periodo==="todos"?"on":""}">Todos os relatórios</button></div>
+        <div class="vt-sec-h"><h3>Curva de consumo do confinamento</h3><div class="seg" id="gSeg"><button data-m="ms" class="${G.modo==="ms"?"on":""}">kg MS</button><button data-m="pv" class="${G.modo==="pv"?"on":""}">%PV</button></div></div>
+        ${filtrosCurvaGeral(cfg)}
         <div class="chart" id="gChart"></div>
         <div class="note" id="gNote"></div>
         <details><summary style="cursor:pointer;font-size:13px;color:var(--ink2)">Ver a tabela por dia de cocho</summary><div class="tablewrap" style="margin-top:6px"><table id="gTab"></table></div></details>
@@ -1125,22 +1152,30 @@ function geralHTML(){
 }
 function ligarGeral(){
   document.querySelectorAll("#gSeg button").forEach(b=>b.onclick=()=>{ G.modo=b.dataset.m; renderVistoria(); });
-  document.querySelectorAll("#gPer button").forEach(b=>b.onclick=()=>{ G.periodo=b.dataset.p; renderVistoria(); });
+  $("#gDe").onchange=e=>{ G.de=e.target.value||null; renderVistoria(); };
+  $("#gAte").onchange=e=>{ G.ate=e.target.value||null; renderVistoria(); };
+  $("#gCats").ontoggle=e=>{ G.aberto=e.target.open; };
+  document.querySelectorAll("#gCats input").forEach(i=>i.onchange=()=>{
+    const todas=[...document.querySelectorAll("#gCats input[value]")];
+    if(i.hasAttribute("data-todas")) G.cats = i.checked ? null : [];
+    else { const marc=todas.filter(x=>x.checked).map(x=>x.value); G.cats = marc.length===todas.length ? null : marc; }
+    G.aberto=true; renderVistoria(); });
   document.querySelectorAll("[data-ir]").forEach(b=>b.onclick=()=>{ V.soAlerta=false; V.curral=b.dataset.ir; V.dir="anim-l"; renderVistoria(); window.scrollTo({top:0,behavior:"instant"}); });
-  const pts=mediasPorDia(G.periodo==="hoje" ? S.rows : linhasPeriodo());
+  const cfg=getConfig(S.farm), linhas=linhasPeriodo(G.de, G.ate, G.cats), pts=mediasPorDia(linhas, cfg);
+  const nRel=new Set(linhas.map(r=>r.data_ref)).size, nBaias=new Set(linhas.map(r=>r.curral+"·"+r.lote)).size;
   const k=G.modo==="pv"?"pv":"ms", un=k==="pv"?"% PV":"kg MS/cab";
   $("#gTab").innerHTML=`<thead><tr><th class="l">Dias de cocho</th><th>Baias</th><th>Cab</th><th>MN</th><th>MS</th><th>%PV</th><th>Diária</th></tr></thead><tbody>${
-    pts.map(p=>`<tr><td class="l">${p.dias}</td><td title="${esc(p.baias.join(", "))}">${G.periodo==="hoje"?esc(p.baias.join(", ")):p.nBaias}</td><td>${p.cab.toLocaleString("pt-BR")}</td><td>${fmt(p.mn)}</td><td>${fmt(p.ms)}</td><td>${fmt(p.pv)}</td><td>${brl(p.diaria)}</td></tr>`).join("")}</tbody>`;
-  $("#gNote").textContent = G.periodo==="hoje"
-    ? "Cada ponto é a média dos animais que estão com o mesmo número de dias de cocho neste relatório (ponderada pelo nº de cabeças)."
-    : `Média de todos os ${Object.keys(DATA[S.farm].relatorios).length} relatórios guardados: em cada dia de cocho, os animais que passaram por ele (ponderada pelo nº de cabeças).`;
+    pts.map(p=>`<tr><td class="l">${p.dias}</td><td title="${esc(p.baias.join(", "))}">${p.nBaias}</td><td>${p.cab.toLocaleString("pt-BR")}</td><td>${fmt(p.mn)}</td><td>${fmt(p.ms)}</td><td>${fmt(p.pv)}</td><td>${brl(p.diaria)}</td></tr>`).join("")}</tbody>`;
+  $("#gNote").textContent = `Cada ponto é a média das baias quando estavam naquele dia de cocho (ponderada pelo nº de cabeças): ${nBaias} baia${nBaias===1?"":"s"} em ${nRel} relatório${nRel===1?"":"s"} do período.`
+    + (pts.some(p=>p[k==="pv"?"espPv":"espMs"]!=null) ? " Tracejado: curva esperada cadastrada, na mesma média." : "");
   requestAnimationFrame(()=>graficoDias($("#gChart"), pts.filter(p=>p[k]!=null), k, un));
 }
 function graficoDias(box, pts, k, un){
   if(!box) return;
   if(!pts.length){ box.innerHTML=`<div class="empty">Sem dados.</div>`; return; }
   const W=Math.max(280,box.clientWidth||520), H=200, m={l:40,r:12,t:14,b:28};
-  const xs=pts.map(p=>p.dias), vs=pts.map(p=>p[k]);
+  const ke = k==="pv" ? "espPv" : "espMs";
+  const xs=pts.map(p=>p.dias), vs=pts.map(p=>p[k]).concat(pts.map(p=>p[ke]).filter(v=>v!=null));
   const minD=Math.min(...xs), maxD=Math.max(Math.max(...xs), minD+1);
   let lo=Math.min(...vs), hi=Math.max(...vs), pad=(hi-lo)*0.15||(k==="pv"?0.2:0.5); lo=Math.max(0,lo-pad); hi+=pad;
   const x=d=>m.l+(d-minD)/(maxD-minD)*(W-m.l-m.r), y=v=>H-m.b-(v-lo)/(hi-lo)*(H-m.t-m.b);
@@ -1149,6 +1184,8 @@ function graficoDias(box, pts, k, un){
   const st=(maxD-minD>150?30:maxD-minD>60?15:maxD-minD>20?10:5)*(W<560?2:1);
   for(let d=Math.ceil(minD/st)*st; d<=maxD; d+=st) g+=`<text x="${x(d)}" y="${H-m.b+16}" text-anchor="middle" font-size="11" fill="var(--ink2)">${d}</text>`;
   g+=`<text x="${W-m.r}" y="${H-3}" text-anchor="end" font-size="10" fill="var(--muted)">dias de cocho</text>`;
+  const pe=pts.filter(p=>p[ke]!=null);
+  if(pe.length) g+=`<path d="${pe.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p[ke])).join("")}" fill="none" stroke="var(--ink2)" stroke-width="2" stroke-dasharray="6 4"/>`;
   g+=`<path d="${pts.map((p,i)=>(i?"L":"M")+x(p.dias)+","+y(p[k])).join("")}" fill="none" stroke="var(--s1)" stroke-width="2"/>`;
   const maxCab=Math.max(...pts.map(p=>p.cab));
   pts.forEach((p,i)=>{ g+=`<circle cx="${x(p.dias)}" cy="${y(p[k])}" r="${pts.length>60?3:4+3*Math.sqrt(p.cab/maxCab)}" fill="var(--s1)" stroke="var(--card)" stroke-width="2" data-i="${i}"/>`; });
@@ -1156,7 +1193,7 @@ function graficoDias(box, pts, k, un){
   const tip=box.querySelector(".tip");
   box.querySelectorAll("circle").forEach(c=>{ const p=pts[+c.dataset.i];
     const show=()=>{ const b=box.getBoundingClientRect(), cb=c.getBoundingClientRect();
-      tip.innerHTML=`<b>${p.dias} dias de cocho</b><br>${fmt(p[k])} ${un}<br>${p.cab.toLocaleString("pt-BR")} cab · ${p.nBaias} baia${p.nBaias>1?"s":""}${p.diaria!=null?"<br>diária "+brl(p.diaria):""}`;
+      tip.innerHTML=`<b>${p.dias} dias de cocho</b><br>${fmt(p[k])} ${un}${p[ke]!=null?" <small>(esperado "+fmt(p[ke])+")</small>":""}<br>${p.cab.toLocaleString("pt-BR")} cab · ${p.nBaias} baia${p.nBaias>1?"s":""}${p.diaria!=null?"<br>diária "+brl(p.diaria):""}`;
       tip.style.left=(cb.left-b.left+cb.width/2)+"px"; tip.style.top=(cb.top-b.top)+"px"; tip.style.opacity=1; };
     c.onmouseenter=show; c.onclick=show; c.onmouseleave=()=>tip.style.opacity=0; });
 }
