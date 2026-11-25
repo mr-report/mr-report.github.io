@@ -481,7 +481,8 @@ function getConfig(farmId){
     c.categorias = c.categorias || {}; Object.keys(d.categorias).forEach(k=>{ if(!(k in c.categorias)) c.categorias[k]=d.categorias[k]; });
     c.limites = c.limites || {"Padrão":d.limites["Padrão"]}; Object.keys(d.limites).forEach(k=>{ if(!(k in c.limites)) c.limites[k]={...(c.limites["Padrão"]||d.limites["Padrão"])}; });
     c.curvas = Array.isArray(c.curvas) ? c.curvas : []; delete c.curva;   // o modelo antigo (linhas por sexo) foi retirado
-    c.escore = c.escore || d.escore; c.custoOp = c.custoOp>0 ? +c.custoOp : null; if(!["%","kgMN","kgMS"].includes(c.escoreUnid)) c.escoreUnid = "%";
+    c.escore = c.escore || d.escore; c.custoOp = c.custoOp>0 ? +c.custoOp : null; if(c.escoreUnid==="kgMN") c.escoreUnid = "kgMS";   // opção em kg MN foi retirada
+    if(!["%","kgMS"].includes(c.escoreUnid)) c.escoreUnid = "%";
     if(c.catInfoTitulo==null) c.catInfoTitulo="Informações adicionais";
     if(!c.catInfo) c.catInfo={};
     cfgCache[farmId]=c;
@@ -509,17 +510,16 @@ function ajusteNota(cfg, nota){
   return e ? e.ajuste : null;
 }
 /* ajuste do escore em % do trato anterior, mesmo quando a tabela está em kg por cabeça */
-const UNID_ESC = {"%":"%", kgMN:"kg MN/cab", kgMS:"kg MS/cab"};
+const UNID_ESC = {"%":"%", kgMS:"kg MS/cab"};
 function ajusteEmPct(cfg, r, aj){
   if(aj==null) return null;
-  if(cfg.escoreUnid==="kgMN"){ const b = r.mn_1d || r.cons_dia_mn; return b ? aj/b*100 : null; }
   if(cfg.escoreUnid==="kgMS"){ const b = r.ms_1d || r.cons_dia_ms; return b ? aj/b*100 : null; }
   return aj;
 }
 function txtAjuste(cfg, aj, ajPct){
   if(aj==null) return "–";
   if(cfg.escoreUnid==="%") return pct(aj,0);
-  return (aj>0?"+":"")+fmt(aj,2)+" kg "+(cfg.escoreUnid==="kgMN"?"MN":"MS")+(ajPct!=null?` (${pct(ajPct,1)})`:"");
+  return (aj>0?"+":"")+fmt(aj,2)+" kg MS"+(ajPct!=null?` (${pct(ajPct,1)})`:"");
 }
 function limitesDe(cfg, dieta){ return cfg.limites[dieta] || cfg.limites["Padrão"]; }
 /* custo do kg de MS da dieta (a da própria dieta; se não tiver, a do "Padrão") */
@@ -1991,7 +1991,7 @@ function diffConfig(a, b){
   [...ma.keys()].filter(k=>!mb.has(k)).forEach(k=>out.push(`curva ${k} removida`));
   [...mb.keys()].filter(k=>ma.has(k) && JSON.stringify(ma.get(k).pontos)!==JSON.stringify(mb.get(k).pontos)).forEach(k=>out.push(`curva ${k}: intervalos alterados`));
   if((a.custoOp??null)!==(b.custoOp??null)) out.push(`custo operacional ${a.custoOp!=null?fmt(a.custoOp,2):"–"} → ${b.custoOp!=null?fmt(b.custoOp,2):"–"} R$/cab/dia`);
-  if((a.escoreUnid||"%")!==(b.escoreUnid||"%")) out.push(`escore: ajuste em ${UNID_ESC[a.escoreUnid||"%"]} → ${UNID_ESC[b.escoreUnid||"%"]}`);
+  if((a.escoreUnid||"%")!==(b.escoreUnid||"%")) out.push(`escore: ajuste em ${UNID_ESC[a.escoreUnid||"%"]||"kg MN/cab"} → ${UNID_ESC[b.escoreUnid||"%"]||"kg MN/cab"}`);
   const ea=new Map((a.escore||[]).map(e=>[e.nota,e.ajuste])), eb=new Map((b.escore||[]).map(e=>[e.nota,e.ajuste]));
   [...eb.keys()].forEach(n=>{ if(!ea.has(n)) out.push(`escore: nota ${fmt(n,1)} incluída (${fmt(eb.get(n),2)})`); else if(ea.get(n)!==eb.get(n)) out.push(`escore: nota ${fmt(n,1)} ${fmt(ea.get(n),2)} → ${fmt(eb.get(n),2)}`); });
   [...ea.keys()].filter(n=>!eb.has(n)).forEach(n=>out.push(`escore: nota ${fmt(n,1)} removida`));
