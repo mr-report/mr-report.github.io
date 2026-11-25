@@ -195,6 +195,7 @@ details.vt-sec summary{cursor:pointer;font-weight:600;font-size:14px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;border-top:3px solid var(--primary)}
 .kpi .l{font-size:12px;color:var(--ink2);font-weight:600}
+.kpi .v.up{color:var(--good)}.kpi .v.down{color:var(--crit)}
 .kpi .v{font-size:26px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;color:var(--primary)}
 @media (prefers-color-scheme:dark){.kpi .v{color:var(--ink)}}
 .kpi .s{font-size:12px;color:var(--ink2)}
@@ -480,7 +481,7 @@ function getConfig(farmId){
     c.categorias = c.categorias || {}; Object.keys(d.categorias).forEach(k=>{ if(!(k in c.categorias)) c.categorias[k]=d.categorias[k]; });
     c.limites = c.limites || {"Padrão":d.limites["Padrão"]}; Object.keys(d.limites).forEach(k=>{ if(!(k in c.limites)) c.limites[k]={...(c.limites["Padrão"]||d.limites["Padrão"])}; });
     c.curvas = Array.isArray(c.curvas) ? c.curvas : []; delete c.curva;   // o modelo antigo (linhas por sexo) foi retirado
-    c.escore = c.escore || d.escore; if(!["%","kgMN","kgMS"].includes(c.escoreUnid)) c.escoreUnid = "%";
+    c.escore = c.escore || d.escore; c.custoOp = c.custoOp>0 ? +c.custoOp : null; if(!["%","kgMN","kgMS"].includes(c.escoreUnid)) c.escoreUnid = "%";
     if(c.catInfoTitulo==null) c.catInfoTitulo="Informações adicionais";
     if(!c.catInfo) c.catInfo={};
     cfgCache[farmId]=c;
@@ -547,12 +548,18 @@ function analisar(farmId, data){
     r.d5Kg = r.d5!=null ? r.cons_dia_ms - r.ms_5d : null;
     r.temCocho = r.cocho_d1!=null;
     const e = esperado(cfg, r); r.sexo = e.sexo; r.pvEsp = e.pv; r.curva = e.curva;
-    r.custoKg = custoDe(cfg, r.racao);
-    r.diaria = r.custoKg!=null && r.cons_dia_ms!=null ? r.custoKg*r.cons_dia_ms : null;     // R$ por cabeça por dia
+    // diária = (R$/kg MS da dieta × consumo de MS) + custo operacional (R$/cab/dia, igual para todas as dietas)
+    r.custoKg = custoDe(cfg, r.racao); r.custoOp = cfg.custoOp>0 ? cfg.custoOp : 0;
+    r.diariaAlim = r.custoKg!=null && r.cons_dia_ms!=null ? r.custoKg*r.cons_dia_ms : null;
+    r.diaria = r.diariaAlim!=null ? r.diariaAlim + r.custoOp : null;
     r.dCurva = e.pv==null || r.cons_dia_pv==null ? null : r.cons_dia_pv - e.pv;
     r.ajusteBruto = r.temCocho ? ajusteNota(cfg, r.cocho_d1) : null;
     r.ajuste = ajusteEmPct(cfg, r, r.ajusteBruto);
     r.ajusteTxt = txtAjuste(cfg, r.ajusteBruto, r.ajuste);
+    // desvio de trato: consumo previsto pela nota de cocho (consumo de ontem × ajuste da nota) × consumo real de hoje
+    r.msPrev = r.ajuste!=null && r.ms_1d ? r.ms_1d*(1+r.ajuste/100) : null;
+    r.desvioKg = r.msPrev!=null && r.cons_dia_ms!=null ? r.cons_dia_ms - r.msPrev : null;
+    r.desvioPct = r.desvioKg!=null && r.msPrev ? r.desvioKg/r.msPrev*100 : null;
     r.checks = [];
     const add=(sev,titulo,texto,curto)=>r.checks.push({sev,titulo,texto,curto});
 
@@ -989,7 +996,7 @@ function renderVistoria(){
           <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
         </div>
         <div class="tiles t2" style="margin-top:8px">
-          <div class="tile"><span>Diária</span><b>${r.diaria!=null?brl(r.diaria):"–"}</b><small>${r.diaria!=null?"por cabeça · "+brl(r.custoKg)+"/kg MS":"sem custo da dieta"}</small></div>
+          <div class="tile"><span>Diária</span><b>${r.diaria!=null?brl(r.diaria):"–"}</b><small>${r.diaria!=null?"alimentação "+brl(r.diariaAlim)+(r.custoOp?" + operacional "+brl(r.custoOp):""):"sem custo da dieta"}</small></div>
           <div class="tile"><span>Custo do dia da baia</span><b>${r.diaria!=null?brl(r.diaria*r.cab,0):"–"}</b><small>${r.cab} cab</small></div>
         </div>
       </section>
@@ -997,6 +1004,14 @@ ${r.temCocho?`      <section class="vt-sec">
         <h3>Leitura de cocho</h3>
         <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajusteBruto==null?"–":(getConfig(S.farm).escoreUnid==="%"?pct(r.ajusteBruto,0):(r.ajusteBruto>0?"+":"")+fmt(r.ajusteBruto,2))}<small>ajuste pedido${getConfig(S.farm).escoreUnid==="%"?"":" ("+UNID_ESC[getConfig(S.farm).escoreUnid]+")"}</small></span></div>
       </section>`:""}
+      ${r.temCocho ? `<section class="vt-sec">
+        <h3>Desvio de trato <small style="text-transform:none;letter-spacing:0;font-weight:400">kg MS/cab</small></h3>
+        <div class="tiles t3">
+          <div class="tile"><span>Previsto pela nota</span><b>${fmt(r.msPrev)}</b><small>${r.msPrev!=null?"ontem "+fmt(r.ms_1d)+" · "+esc(r.ajusteTxt):r.ajuste==null?"nota sem ajuste cadastrado":"sem consumo de ontem"}</small></div>
+          <div class="tile"><span>Real</span><b>${fmt(r.cons_dia_ms)}</b><small>consumo de hoje</small></div>
+          <div class="tile"><span>Desvio</span><b class="${dirCls(r.desvioPct)}">${r.desvioKg==null?"–":(r.desvioKg>0?"+":"")+fmt(r.desvioKg)+" kg"}</b><small>${r.desvioPct==null?"–":pct(r.desvioPct)}</small></div>
+        </div>
+      </section>` : ""}
       <details class="vt-sec" ${r.alertas.length?"":""}><summary>Verificações ${r.alertas.length?`<span class="chip ${r.sev}">${r.alertas.length} alerta${r.alertas.length>1?"s":""}</span>`:`<span class="chip ok">tudo certo</span>`}</summary>
         <div style="margin-top:6px">${ord.map(c=>`<div class="check"><div class="ico ${c.sev}">${c.sev==="ok"?"✓":"!"}</div><div><b>${esc(c.titulo)}</b><p>${esc(c.texto)}</p></div></div>`).join("")}</div></details>
     </div>`}
@@ -1038,7 +1053,7 @@ function mediasPorDia(linhas){
 function linhasPeriodo(){
   const cfg=getConfig(S.farm), out=[];
   Object.entries(DATA[S.farm].relatorios).forEach(([d,rs])=>rs.forEach(r=>{ const c=custoDe(cfg,r.racao);
-    out.push({...r, diaria: c!=null&&r.cons_dia_ms!=null ? c*r.cons_dia_ms : null}); }));
+    out.push({...r, diaria: c!=null&&r.cons_dia_ms!=null ? c*r.cons_dia_ms + (cfg.custoOp>0?cfg.custoOp:0) : null}); }));
   return out;
 }
 function geralHTML(){
@@ -1074,10 +1089,19 @@ function geralHTML(){
       <section class="vt-sec">
         <h3>Custo de alimentação</h3>
         ${comD.length ? `<div class="tiles t2">
-          <div class="tile"><span>Diária média</span><b>${brl(custoDia/cabD)}</b><small>por cabeça</small></div>
+          <div class="tile"><span>Diária média</span><b>${brl(custoDia/cabD)}</b><small>por cabeça${cfg.custoOp>0?" · inclui "+brl(cfg.custoOp)+" operacional":""}</small></div>
           <div class="tile"><span>Custo do dia</span><b>${brl(custoDia,0)}</b><small>${cabD.toLocaleString("pt-BR")} cab${cabD<cab?" (dietas sem custo ficam de fora)":""}</small></div>
         </div>` : `<p class="note" style="margin:0">Cadastre o custo do kg de MS das dietas em Cadastros → Limites por dieta para ver a diária.</p>`}
       </section>
+      ${(()=>{ const rd=R.filter(r=>r.desvioKg!=null); if(!rd.length) return "";
+        const kg=media(rd,"desvioKg"), pr=media(rd,"msPrev"), abs=rd.reduce((s,r)=>s+Math.abs(r.desvioPct)*r.cab,0)/rd.reduce((s,r)=>s+r.cab,0);
+        return `<section class="vt-sec">
+        <h3>Desvio de trato <small style="text-transform:none;letter-spacing:0;font-weight:400">real × previsto pela nota de cocho</small></h3>
+        <div class="tiles t3">
+          <div class="tile"><span>Desvio médio</span><b class="${dirCls(kg/pr*100)}">${(kg>0?"+":"")+fmt(kg)} kg</b><small>MS/cab · ${pct(kg/pr*100)}</small></div>
+          <div class="tile"><span>Desvio absoluto</span><b>${fmt(abs,1)}%</b><small>média sem sinal</small></div>
+          <div class="tile"><span>Baias</span><b>${rd.length}</b><small>com nota e consumo de ontem</small></div>
+        </div></section>`; })()}
       <section class="vt-sec">
         <div class="vt-sec-h"><h3>Consumo por dias de cocho</h3><div class="seg" id="gSeg"><button data-m="ms" class="${G.modo==="ms"?"on":""}">kg MS</button><button data-m="pv" class="${G.modo==="pv"?"on":""}">%PV</button></div></div>
         <div class="seg" id="gPer" style="margin:2px 0 6px"><button data-p="hoje" class="${G.periodo==="hoje"?"on":""}">Hoje</button><button data-p="todos" class="${G.periodo==="todos"?"on":""}">Todos os relatórios</button></div>
@@ -1221,6 +1245,9 @@ function renderKpis(R){
     <div class="kpi"><div class="l">IMS média (%PV)</div><div class="v">${fmt(pv)}%</div><div class="s">${esp!=null?"esperado "+fmt(esp)+"% ("+pp(pv-esp)+")":"sem curva cadastrada"}</div></div>
     ${(()=>{ const cd=R.filter(r=>r.diaria!=null); if(!cd.length) return ""; const tot=cd.reduce((s,r)=>s+r.diaria*r.cab,0), c=cd.reduce((s,r)=>s+r.cab,0);
       return `<div class="kpi"><div class="l">Diária média</div><div class="v">${brl(tot/c)}</div><div class="s">custo do dia ${brl(tot,0)}${c<cab?" · "+(cab-c)+" cab sem custo":""}</div></div>`; })()}
+    ${(()=>{ const rd=R.filter(r=>r.desvioKg!=null); if(!rd.length) return ""; const kg=media(rd,"desvioKg"), pr=media(rd,"msPrev");
+      const abs=rd.reduce((s,r)=>s+Math.abs(r.desvioPct)*r.cab,0)/rd.reduce((s,r)=>s+r.cab,0);
+      return `<div class="kpi"><div class="l">Desvio de trato</div><div class="v ${dirCls(kg/pr*100)}">${(kg>0?"+":"")+fmt(kg)} kg</div><div class="s">${pct(kg/pr*100)} · absoluto ${fmt(abs,1)}%</div></div>`; })()}
     <div class="kpi"><div class="l">Baias com alerta</div><div class="v">${nA+nM}</div><div class="s"><span class="chip alto">${nA} alto</span> <span class="chip medio">${nM} atenção</span></div></div>`;
 }
 function renderAlertas(R){
@@ -1372,7 +1399,7 @@ function renderDietas(R){
 /* tabela completa */
 const COLS=[
   {k:"curral",t:"Curral",l:1},{k:"sev",t:"Status"},{k:"cab",t:"Cab"},{k:"dias_conf",t:"Dias cocho"},{k:"racao",t:"Dieta",l:1},{k:"racao_dias",t:"Dias dieta"},
-  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem",kg:"dOntemKg"},{k:"d5",t:"Δ média",kg:"d5Kg"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},{k:"diaria",t:"Diária R$"},
+  {k:"cons_dia_mn",t:"MN"},{k:"cons_dia_ms",t:"MS"},{k:"dOntem",t:"Δ ontem",kg:"dOntemKg"},{k:"d5",t:"Δ média",kg:"d5Kg"},{k:"cons_dia_pv",t:"%PV"},{k:"pvEsp",t:"%PV esp."},{k:"dCurva",t:"Δ curva"},{k:"diaria",t:"Diária R$"},{k:"desvioPct",t:"Desvio trato",kg:"desvioKg"},
   {k:"tend",t:"Últimos 10 dias",l:1,semOrdem:1},{k:"cocho_d1",t:"Cocho D-3/D-2/D-1"}
 ];
 const chaveCol = c => UNID==="kg" && c.kg ? c.kg : c.k;
@@ -1393,7 +1420,7 @@ function renderTabela(R){
     R.map(r=>`<tr data-cur="${esc(r.curral)}"><td><b>${esc(r.curral)}</b></td><td><span class="chip ${r.sev}">${LBL[r.sev]}${r.alertas.length?" · "+r.alertas.length:""}</span></td>
       <td>${r.cab}</td><td>${r.dias_conf??"–"}</td><td class="l">${esc(r.racao)}</td><td>${r.racao_dias??"–"}</td><td>${fmt(r.cons_dia_mn)}</td><td><b>${fmt(r.cons_dia_ms)}</b></td>
       <td class="${cls(r.dOntem)}">${varF(r.dOntem,r.dOntemKg)}</td><td class="${cls(r.d5)}">${varF(r.d5,r.d5Kg)}</td><td>${fmt(r.cons_dia_pv)}</td><td>${fmt(r.pvEsp)}</td>
-      <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td>${r.diaria==null?"–":fmt(r.diaria)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
+      <td class="${cls(r.dCurva)}">${r.dCurva==null?"–":(r.dCurva>0?"+":"")+fmt(r.dCurva)}</td><td>${r.diaria==null?"–":fmt(r.diaria)}</td><td class="${cls(r.desvioPct)}">${r.desvioPct==null?"–":varF(r.desvioPct,r.desvioKg)}</td><td class="l">${spark(r)}</td><td>${fmt(r.cocho_d3,1)} / ${fmt(r.cocho_d2,1)} / ${fmt(r.cocho_d1,1)}</td></tr>`).join("")+
     (R.length?"":`<tr><td colspan="${COLS.length}" class="l">Nenhuma baia com esses filtros.</td></tr>`)+`</tbody>`;
   $("#tbl").querySelectorAll("th").forEach(th=>{ const c=COLS.find(c=>chaveCol(c)===th.dataset.k); if(!c||c.semOrdem) return;
     th.onclick=()=>{ const kk=th.dataset.k; S.sort={k:kk,dir:S.sort.k===kk?-S.sort.dir:(kk==="curral"||kk==="racao"?1:-1)}; renderTabela(baiasRows()); }; });
@@ -1401,9 +1428,9 @@ function renderTabela(R){
 }
 $("#btnCsv").onclick=()=>{
   const R=[...baiasRows()].sort(ordCurral);
-  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média curta","Var. ontem %","Var. média %","Var. ontem kg","Var. média kg","Desvio curva p.p.","Custo kg MS R$","Diária R$/cab","Custo do dia R$","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
+  const cab=["Data","Curral","Lote","Cab","CT","Sexo","Dias de cocho","Dieta","Dias na dieta","MN kg/cab","MS kg/cab","%PV","%PV esperado","MS ontem","MS média curta","Var. ontem %","Var. média %","Var. ontem kg","Var. média kg","Desvio curva p.p.","Custo kg MS R$","Custo operacional R$/cab","Diária R$/cab","Custo do dia R$","MS prevista pela nota","Desvio trato kg MS","Desvio trato %","Cocho D-3","Cocho D-2","Cocho D-1","Status","Alertas"];
   const n=v=>v==null||isNaN(v)?"":String(Math.round(v*100)/100).replace(".",",");
-  const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.custoKg),n(r.diaria),n(r.diaria!=null?r.diaria*r.cab:null),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
+  const linhas=R.map(r=>[S.data,r.curral,r.lote,r.cab,r.ct,r.sexo||"",r.dias_conf,r.racao,r.racao_dias??"",n(r.cons_dia_mn),n(r.cons_dia_ms),n(r.cons_dia_pv),n(r.pvEsp),n(r.ms_1d),n(r.ms_5d),n(r.dOntem),n(r.d5),n(r.dOntemKg),n(r.d5Kg),n(r.dCurva),n(r.custoKg),n(r.custoOp),n(r.diaria),n(r.diaria!=null?r.diaria*r.cab:null),n(r.msPrev),n(r.desvioKg),n(r.desvioPct),n(r.cocho_d3),n(r.cocho_d2),n(r.cocho_d1),LBL[r.sev],r.alertas.map(a=>a.curto||a.titulo).join(" | ")]);
   const csv="﻿"+[cab].concat(linhas).map(l=>l.map(v=>{ let s=String(v??"");
     if(/^[=+\-@\t\r]/.test(s) && !/^-?[\d.,]+$/.test(s)) s="'"+s;   // texto do PDF não vira fórmula no Excel
     return /[;"\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }).join(";")).join("\r\n");
@@ -1425,7 +1452,7 @@ function openBaia(cur){
     </div>
     <h3 style="margin-top:14px">Consumo do dia (kg/cab)</h3>
     <div class="grid2" style="grid-template-columns:repeat(3,1fr)">${mini("MN",fmt(r.cons_dia_mn))}${mini("MS",fmt(r.cons_dia_ms))}${mini("%PV",fmt(r.cons_dia_pv)+(r.pvEsp!=null?` <small>esp. ${fmt(r.pvEsp)}</small>`:""))}</div>
-    <div class="grid2" style="margin-top:8px">${mini("MS ontem",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("MS média "+(r.janela||5)+" dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta atual",esc(r.racao)+" <small>("+(r.racao_dias??"–")+" dias)</small>")}</div>
+    <div class="grid2" style="margin-top:8px">${mini("MS ontem",fmt(r.ms_1d)+" <small>"+pct(r.dOntem)+"</small>")}${mini("MS média "+(r.janela||5)+" dias",fmt(r.ms_5d)+" <small>"+pct(r.d5)+"</small>")}${r.desvioKg!=null?mini("Desvio de trato (previsto "+fmt(r.msPrev)+")",(r.desvioKg>0?"+":"")+fmt(r.desvioKg)+" kg <small>"+pct(r.desvioPct)+"</small>"):""}${r.diaria!=null?mini("Diária",brl(r.diaria)+" <small>"+brl(r.diaria*r.cab,0)+"/dia</small>"):""}${mini("Peso entrada → atual proj.",fmt(r.peso_entrada,0)+" → "+fmt(r.peso_atual_prj,0)+" kg")}${mini("Dieta atual",esc(r.racao)+" <small>("+(r.racao_dias??"–")+" dias)</small>")}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px"><h3 style="margin:0">Curva de consumo</h3><div class="seg" id="segM"><button data-m="ms" class="on">kg MS</button><button data-m="pv">%PV</button></div></div>
     <div class="chart" id="bChart"></div><div class="legend" id="bLegend"></div><div class="note" id="bNote"></div>
 ${r.temCocho?`    <h3 style="margin-top:14px">Leitura de cocho</h3>
@@ -1774,6 +1801,9 @@ function renderAdm(){
   </div>
   <div class="adm-section card">
     <h3 style="margin-top:0">Limites de alerta e custo por dieta</h3>
+    <label class="field" style="max-width:320px"><span>Custo operacional (R$/cab/dia) – vale para todas as dietas</span>
+      <input type="number" id="custoOp" step="0.01" min="0" inputmode="decimal" value="${cfg.custoOp??""}" placeholder="ex.: 3,50"></label>
+    <p class="help" style="margin-top:-4px">Diária = (custo do kg de MS da dieta × consumo de MS por cabeça) + custo operacional.</p>
     <p class="help">Acima destes limites a baia entra em alerta. “Padrão” vale para dietas sem linha própria. Use “+ Dieta” para cadastrar antes uma dieta que ainda vai entrar; o nome precisa ser igual ao que aparece no relatório do TGC.</p>
     <div class="tablewrap"><table class="edit" id="tLim"><thead><tr>${[["l","Dieta","dieta"],["","× ontem (±%)","ontem"],["","× média (±%)","cinco"],["","× curva (±p.p.)","curva"],["","Escore (±p.p.)","escore"],["","Custo kg/MS (R$)","custo"]]
       .map(([c,tt,k])=>`<th class="${c} com-dica" data-dica="${k}" title="${esc(DICAS_LIM[k])}" tabindex="0">${tt} <span class="i-dica" aria-hidden="true">?</span></th>`).join("")}<th></th></tr></thead><tbody>
@@ -1886,7 +1916,7 @@ function renderAdm(){
     $("#tLim tbody").insertAdjacentHTML("beforeend",limRow("",p,false)); bindDel(); $("#tLim tbody tr:last-child input[data-dieta]").focus(); };
   $("#saveCfg").onclick=()=>{
     lerCurvas();
-    const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curvas:[],escore:[],escoreUnid:$("#escUnid").value,limites:{}};
+    const n={categorias:{},catInfoTitulo:$("#catTitulo").value.trim()||"Informações adicionais",catInfo:{},curvas:[],escore:[],escoreUnid:$("#escUnid").value,limites:{},custoOp: $("#custoOp").value===""||+$("#custoOp").value<=0 ? null : +$("#custoOp").value};
     const repetidas=[];
     el.querySelectorAll("#tCat tbody tr").forEach(tr=>{ const sg=tr.querySelector("[data-sigla]").value.trim().toUpperCase(); if(!sg) return;
       if(sg in n.categorias) repetidas.push(sg);
@@ -1944,7 +1974,7 @@ const DICAS_LIM = {
   cinco: "Quanto o consumo de MS de hoje pode variar em relação à média curta do relatório (5 dias no TGC, 3 no Feed Manager e FarmTell) antes de virar alerta.",
   curva: "Diferença aceita entre o %PV consumido e o %PV esperado pela curva, em pontos percentuais. Ex.: 0,20 com esperado de 2,35% aceita de 2,15% a 2,55%.",
   escore: "Diferença aceita entre o ajuste que a nota de cocho pediu e a variação real do consumo, em pontos percentuais. Ex.: nota pediu +5% e o consumo subiu 2% = diferença de 3.",
-  custo: "Preço do kg de matéria seca desta dieta. A diária é custo × consumo de MS por cabeça; o custo do dia da baia é a diária × nº de cabeças. Em branco: usa o custo do “Padrão”."
+  custo: "Preço do kg de matéria seca desta dieta. A diária é (custo × consumo de MS por cabeça) + custo operacional; o custo do dia da baia é a diária × nº de cabeças. Em branco: usa o custo do “Padrão”."
 };
 /* resumo do que mudou entre duas versões dos cadastros */
 function diffConfig(a, b){
@@ -1957,6 +1987,7 @@ function diffConfig(a, b){
   [...mb.keys()].filter(k=>!ma.has(k)).forEach(k=>out.push(`curva ${k} adicionada`));
   [...ma.keys()].filter(k=>!mb.has(k)).forEach(k=>out.push(`curva ${k} removida`));
   [...mb.keys()].filter(k=>ma.has(k) && JSON.stringify(ma.get(k).pontos)!==JSON.stringify(mb.get(k).pontos)).forEach(k=>out.push(`curva ${k}: intervalos alterados`));
+  if((a.custoOp??null)!==(b.custoOp??null)) out.push(`custo operacional ${a.custoOp!=null?fmt(a.custoOp,2):"–"} → ${b.custoOp!=null?fmt(b.custoOp,2):"–"} R$/cab/dia`);
   if((a.escoreUnid||"%")!==(b.escoreUnid||"%")) out.push(`escore: ajuste em ${UNID_ESC[a.escoreUnid||"%"]} → ${UNID_ESC[b.escoreUnid||"%"]}`);
   const ea=new Map((a.escore||[]).map(e=>[e.nota,e.ajuste])), eb=new Map((b.escore||[]).map(e=>[e.nota,e.ajuste]));
   [...eb.keys()].forEach(n=>{ if(!ea.has(n)) out.push(`escore: nota ${fmt(n,1)} incluída (${fmt(eb.get(n),2)})`); else if(ea.get(n)!==eb.get(n)) out.push(`escore: nota ${fmt(n,1)} ${fmt(ea.get(n),2)} → ${fmt(eb.get(n),2)}`); });
