@@ -1002,10 +1002,6 @@ function renderVistoria(){
           <div class="tile"><span>Dias na dieta atual</span><b>${r.racao_dias??"–"}</b><small title="${esc(r.racao)}">${esc(r.racao)}</small></div>
         </div>
       </section>
-${r.temCocho?`      <section class="vt-sec">
-        <h3>Leitura de cocho</h3>
-        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajusteBruto==null?"–":(getConfig(S.farm).escoreUnid==="%"?pct(r.ajusteBruto,0):(r.ajusteBruto>0?"+":"")+fmt(r.ajusteBruto,2))}<small>ajuste pedido${getConfig(S.farm).escoreUnid==="%"?"":" ("+UNID_ESC[getConfig(S.farm).escoreUnid]+")"}</small></span></div>
-      </section>`:""}
       ${r.temCocho ? `<section class="vt-sec">
         <h3>Desvio de trato <small style="text-transform:none;letter-spacing:0;font-weight:400">kg MS/cab</small></h3>
         <div class="tiles t3">
@@ -1014,6 +1010,10 @@ ${r.temCocho?`      <section class="vt-sec">
           <div class="tile"><span>Desvio</span><b class="${dirCls(r.desvioPct)}">${r.desvioKg==null?"–":(r.desvioKg>0?"+":"")+fmt(r.desvioKg)+" kg"}</b><small>${r.desvioPct==null?"–":pct(r.desvioPct)}</small></div>
         </div>
       </section>` : ""}
+${r.temCocho?`      <section class="vt-sec">
+        <h3>Leitura de cocho</h3>
+        <div class="score"><span>${fmt(r.cocho_d3,1)}<small>${ROT_COCHO(r)[0]}</small></span><span>${fmt(r.cocho_d2,1)}<small>${ROT_COCHO(r)[1]}</small></span><span>${fmt(r.cocho_d1,1)}<small>${ROT_COCHO(r)[2]}</small></span><span>${r.ajusteBruto==null?"–":(getConfig(S.farm).escoreUnid==="%"?pct(r.ajusteBruto,0):(r.ajusteBruto>0?"+":"")+fmt(r.ajusteBruto,2))}<small>ajuste pedido${getConfig(S.farm).escoreUnid==="%"?"":" ("+UNID_ESC[getConfig(S.farm).escoreUnid]+")"}</small></span></div>
+      </section>`:""}
       <section class="vt-sec">
         <h3>Custos</h3>
         <div class="tiles t2">
